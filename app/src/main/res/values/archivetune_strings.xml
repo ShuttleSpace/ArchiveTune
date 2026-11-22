@@ -817,7 +817,7 @@
     <string name="import_no_search_results">No matching songs found.</string>
     <string name="import_matched_to">Matched to: %1$s — %2$s</string>
     <string name="change_song_source">Change source</string>
-    <string name="change_song_source_desc">Replace this playlist entry from Local or YouTube Music.</string>
+    <string name="change_song_source_desc">Replace this entry with a match from Local, YouTube Music or a custom source.</string>
     <string name="replace_song">Replace song</string>
     <string name="song_source_changed">Song source changed.</string>
     <string name="song_source_change_failed">Couldn’t change the song source.</string>
@@ -1161,4 +1161,8 @@
     <string name="media_notification_reset_done">Notification settings reset</string>
     <string name="media_notification_settings_load_failed">Couldn\'t load notification settings</string>
     <string name="media_notification_settings_save_failed">Couldn\'t save notification settings</string>
+    <string name="source_workbench_picker">Sources %1$d/%2$d</string>
+    <string name="source_workbench_invert_sources">Invert</string>
+    <string name="source_workbench_clear_sources">Clear</string>
+    <string name="source_workbench_done">Done</string>
 </resources>

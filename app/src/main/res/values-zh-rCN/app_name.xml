@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_description">纤薄播放器，造型封面可展开为完整播放控件</string>
+    <string name="widget_album_art_description">模糊封面衬底上框住的专辑封面，带播放按钮</string>
+    <string name="widget_now_playing_card_description">随封面染色的卡片，显示曲目信息、进度和播放控件</string>
+    <string name="widget_playback_deck_description">旋转唱片封面，显示曲目信息和播放控件</string>
+    <string name="widget_playback_capsule_description">胶囊形播放器，圆形封面加播放按钮</string>
+    <string name="widget_playback_spotlight_description">满屏封面，展开后显示曲目信息和控件</string>
+    <string name="widget_playback_command_description">大号播放按钮，附曲目信息</string>
+    <string name="widget_listening_insights_description">收听时长、播放次数、最近歌曲、风格与推荐</string>
+    <string name="widget_artwork_now_playing_description">封面、曲目信息和播放按钮，尺寸较大时显示最近播放的歌曲</string>
+    <string name="widget_mini_player_description">小尺寸封面播放器，带播放按钮</string>
+    <string name="widget_up_next_description">当前歌曲及其后排队列的歌曲</string>
+    <string name="widget_recently_played_description">最近歌曲网格，点按即可播放</string>
+    <string name="widget_artwork_now_playing_name">正在播放</string>
+    <string name="widget_mini_player_name">迷你播放器</string>
+    <string name="widget_up_next_name">接下来播放</string>
+    <string name="widget_recently_played_name">最近播放</string>
+    <string name="widget_player_name">音乐播放器</string>
+    <string name="widget_album_art_name">专辑画框</string>
+    <string name="widget_now_playing_card_name">正在播放卡片</string>
+    <string name="widget_playback_deck_name">唱片台</string>
+    <string name="widget_playback_capsule_name">播放胶囊</string>
+    <string name="widget_playback_spotlight_name">封面聚光</string>
+    <string name="widget_playback_command_name">播放遥控</string>
+    <string name="widget_listening_insights_name">收听日志</string>
+</resources>
