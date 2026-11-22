@@ -3,6 +3,9 @@ plugins {
 }
 
 repositories {
+    // Fork: aliyun mirror first, upstream hosts kept as fallback (repo.maven.apache.org
+    // handshakes get terminated on this network).
+    maven("https://maven.aliyun.com/repository/public")
     google()
     mavenCentral()
     gradlePluginPortal()

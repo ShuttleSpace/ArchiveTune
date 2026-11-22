@@ -2,6 +2,9 @@
 
 pluginManagement {
     repositories {
+        // Fork: aliyun mirrors first — repo.maven.apache.org handshakes get terminated here.
+        maven("https://maven.aliyun.com/repository/public")
+        maven("https://maven.aliyun.com/repository/google")
         google {
             content {
                 includeGroupAndSubgroups("com.android")
@@ -18,6 +21,10 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
 
     repositories {
+        // Fork: jitpack terminates the JVM TLS handshake here; artifacts prefetched by curl.
+        maven { url = uri("/Users/humphrey/.gradle/local-mirror") }
+        maven("https://maven.aliyun.com/repository/public")
+        maven("https://maven.aliyun.com/repository/google")
         google()
         mavenCentral {
             mavenContent {
@@ -26,9 +33,11 @@ dependencyResolutionManagement {
         }
         exclusiveContent {
             forRepository {
+                // Fork: jitpack.io terminates the JVM TLS handshake on this network, so the
+                // artifact is prefetched with curl into a local maven repo.
                 maven {
                     name = "JitPack"
-                    setUrl("https://jitpack.io")
+                    setUrl("file:///Users/humphrey/.gradle/local-mirror")
                 }
             }
             filter {
