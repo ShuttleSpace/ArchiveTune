@@ -58,8 +58,25 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
             }
         } ?: throw ModuleException(ModuleFailure.TIMEOUT)
 
-    suspend fun search(id: String, source: String, origin: String, query: String, settings: Map<String, String>): List<ModuleTrack> {
-        val result = call(id, source, origin, "searchTracks", JSONArray().put(query).put(10).put(context(settings)))
+    suspend fun search(
+        id: String,
+        source: String,
+        origin: String,
+        query: String,
+        settings: Map<String, String>,
+        pageSize: Int = 10,
+        page: Int = 1,
+    ): List<ModuleTrack> {
+        // Trailing args stay backward compatible: modules that do not know about paging
+        // simply ignore them (ArchiveTune only ever passes query+limit+context).
+        val result =
+            call(
+                id,
+                source,
+                origin,
+                "searchTracks",
+                JSONArray().put(query).put(pageSize).put(context(settings)).put(page),
+            )
         val tracks = when (result) {
             is JSONArray -> result
             is JSONObject -> result.optJSONArray("tracks")
@@ -83,7 +100,11 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
                 (if (track.has("durationMs")) track.optLong("durationMs").div(1000).toInt()
                     else track.optInt("duration")).takeIf { it > 0 },
                 if (track.has("explicit") && !track.isNull("explicit")) track.optBoolean("explicit") else null,
-                track.text("isrc").takeIf(String::isNotBlank))
+                track.text("isrc").takeIf(String::isNotBlank),
+                track.text("thumbnail").ifBlank { track.text("thumbnailUrl") }
+                    .ifBlank { track.text("cover") }
+                    .ifBlank { track.text("artwork") }
+                    .takeIf(String::isNotBlank))
         }
     }
 
@@ -192,6 +213,9 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
             }
             val session = checkNotNull(engine)
             val runtime = session.runtime
+            // The host keeps a per-operation deadline (15 s) that only advances on begin();
+            // without it every call on a cached engine fails with TIMEOUT once it has elapsed.
+            session.host.begin()
             session.requestProblem.set(null)
             try {
                 evaluate(runtime, session.host,
@@ -207,7 +231,7 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
                             const name = ['Error','TypeError','ReferenceError','SyntaxError','RangeError','URIError','EvalError','AbortError'].includes(error?.name) ? error.name : 'Error';
                             const frame = String(error?.stack || '').match(/module-(?:host|provider|call)\.js:\d+(?::\d+)?/);
                             const code = ['RESOLUTION_TIMEOUT','VERIFY_REQUIRED'].includes(error?.code) ? error.code : '';
-                            globalThis.__moduleResult = JSON.stringify({failed: true, name, code, frame: frame ? frame[0] : ''});
+                            globalThis.__moduleResult = JSON.stringify({failed: true, name, code, frame: frame ? frame[0] : '', message: String(error?.message || '').slice(0, 300)});
                         } finally {
                             globalThis.__moduleClearTimers();
                         }
@@ -233,7 +257,11 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
                         "VERIFY_REQUIRED" -> ModuleFailure.INVALID_CONFIGURATION
                         else -> if (name == "Error" || name == "AbortError") problem?.failure ?: ModuleFailure.EXECUTION else ModuleFailure.EXECUTION
                     }
-                    val detail = listOf(name, code, envelope.optString("frame"), problem?.code.orEmpty()).filter(String::isNotBlank).joinToString("/")
+                    // Keep the JS message: without it a provider throw shows as "Error" only.
+                    val detail =
+                        listOf(name, code, envelope.optString("message").take(200), envelope.optString("frame"), problem?.code.orEmpty())
+                            .filter(String::isNotBlank)
+                            .joinToString("/")
                     throw ModuleException(failure, stage = ModuleLoadStage.PROVIDER, diagnosticCode = detail)
                 }
                 if (!envelope.has("value") || envelope.isNull("value")) {
@@ -290,7 +318,8 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
                 } catch (error: CancellationException) { throw error }
                 catch (error: Exception) {
                     val failure = (error as? ModuleException)?.failure ?: ModuleFailure.NETWORK
-                    requestProblem.set(RequestProblem(failure, "REQUEST_${failure.name}"))
+                    android.util.Log.d("LTFetch", "fetch failed: ${error.javaClass.simpleName}: ${error.message}", error)
+                    requestProblem.set(RequestProblem(failure, "REQUEST_${failure.name}: ${error.javaClass.simpleName}: ${error.message.orEmpty().take(160)}"))
                     throw error
                 }
             }

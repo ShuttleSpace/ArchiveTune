@@ -157,6 +157,7 @@ data class ModuleTrack(
     val durationSeconds: Int?,
     val explicit: Boolean?,
     val identifier: String?,
+    val thumbnailUrl: String? = null,
 )
 
 data class ModuleStream(

@@ -109,6 +109,8 @@ internal class ModuleExtensionHost(
                 }
                 "sessionStatus" -> JSONObject().put("authenticated", session?.authenticated() == true)
                 "clearCookies" -> { cookies?.clear(); true }
+                "cookieGet" -> cookies?.header(input.optString("domain"))
+                "cookieSet" -> { cookies?.replace(input.optString("domain"), input.optString("cookies")); true }
                 "sessionClear" -> { (session ?: throw ModuleException(ModuleFailure.INVALID_CONFIGURATION)).clear(); JSONObject().put("success", true) }
                 "storageGet", "storageSet", "storageRemove", "storageClear", "storageKeys" -> {
                     if (!storageAllowed) throw ModuleException(ModuleFailure.UNSUPPORTED, diagnosticCode = "EXT_STORAGE_PERMISSION")
@@ -185,17 +187,45 @@ private class ModuleCookieJar(private val storage: ModuleRuntimeStorage, private
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>): Unit = cookieOperation {
         val next = read().associateBy { (_, cookie) -> listOf(cookie.domain, cookie.path, cookie.name) }.toMutableMap()
         cookies.forEach { cookie -> next[listOf(cookie.domain, cookie.path, cookie.name)] = url.toString() to cookie }
-        val array = JSONArray()
-        val retained = next.values.filter { it.second.expiresAt > System.currentTimeMillis() }.takeLast(512)
-        retained.forEach { (origin, cookie) ->
-            array.put(JSONObject().put("url", origin).put("cookie", cookie.toString()))
-        }
-        if (persist) storage.write("cookies", JSONObject().put("values", array))
-        else snapshot = retained
+        persist(next.values.toList())
+    }
+
+    private fun persist(entries: List<Pair<String, Cookie>>) {
+        val retained = entries.filter { it.second.expiresAt > System.currentTimeMillis() }.takeLast(512)
+        if (persist) {
+            val array = JSONArray()
+            retained.forEach { (origin, cookie) -> array.put(JSONObject().put("url", origin).put("cookie", cookie.toString())) }
+            storage.write("cookies", JSONObject().put("values", array))
+        } else snapshot = retained
     }
 
     @Synchronized
     fun clear() { storage.write("cookies", JSONObject()); snapshot = null }
+
+    /** `a=1; b=2` for the cookies stored under [domain], or null when empty. */
+    @Synchronized
+    fun header(domain: String): String? = cookieOperation {
+        val host = domain.trim().trimStart('.').lowercase(Locale.ROOT)
+        if (host.isEmpty()) return@cookieOperation null
+        read().map { it.second }.filter { it.domain.trimStart('.').lowercase(Locale.ROOT) == host }
+            .takeIf { it.isNotEmpty() }?.joinToString("; ") { "${it.name}=${it.value}" }
+    }
+
+    /** Replaces every cookie of [domain] with the semicolon-separated [header]. */
+    @Synchronized
+    fun replace(domain: String, header: String) = cookieOperation {
+        val host = domain.trim().trimStart('.').lowercase(Locale.ROOT)
+        if (host.isEmpty()) return@cookieOperation Unit
+        val url = "https://$host/".toHttpUrl().toString()
+        val next = read().filterNot { it.second.domain.trimStart('.').lowercase(Locale.ROOT) == host }.toMutableList()
+        header.split(';').forEach { part ->
+            val name = part.substringBefore('=').trim()
+            if (name.isEmpty()) return@forEach
+            val value = part.substringAfter('=', "").trim()
+            next += url to Cookie.Builder().domain(host).path("/").name(name).value(value).build()
+        }
+        persist(next)
+    }
 
     private fun <T> cookieOperation(operation: () -> T): T = try { operation() }
     catch (error: Exception) { throw if (error is java.io.IOException) error else java.io.IOException("Module cookie storage unavailable", error) }

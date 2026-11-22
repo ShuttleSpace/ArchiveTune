@@ -164,6 +164,7 @@ class ModuleHttpClient(configuredClient: OkHttpClient? = null) {
             continuation.invokeOnCancellation { call.cancel(); calls.remove(id, call) }
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
+                    android.util.Log.d("LTHttp", "failed ${call.request().url}: $e", e)
                     calls.remove(id, call)
                     if (continuation.isActive) continuation.resumeWithException((e.cause as? ModuleException) ?: ModuleException(ModuleFailure.NETWORK, e))
                 }
