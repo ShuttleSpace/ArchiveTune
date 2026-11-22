@@ -641,6 +641,9 @@ class BackupRestoreViewModel
                             databaseRestoreDirectory =
                                 Files.createTempDirectory(context.cacheDir.toPath(), "database-restore-").toFile()
                         }
+                        // Sources come back with the enabled flags they were backed up with, so tell
+                        // the user how many of them a restore brought along.
+                        var restoredSources = 0
                         currentCoroutineContext().ensureActive()
                         withContext(NonCancellable) {
                             completedUnits++
@@ -664,7 +667,8 @@ class BackupRestoreViewModel
                                         when (name) {
                                             ModuleRepository.BACKUP_ENTRY -> {
                                                 emit(context.getString(R.string.restore_step_restoring_settings), indeterminate = true)
-                                                restoreModuleBackup(zip.readModuleBytes(ModuleRepository.MAX_REGISTRY_BYTES))
+                                                restoredSources =
+                                                    restoreModuleBackup(zip.readModuleBytes(ModuleRepository.MAX_REGISTRY_BYTES))
                                             }
                                             SETTINGS_XML_FILENAME -> {
                                                 emit(context.getString(R.string.restore_step_restoring_settings), indeterminate = true)
@@ -727,7 +731,13 @@ class BackupRestoreViewModel
                                 databaseRestoreDirectory = null
                             }
                             withContext(Dispatchers.Main) {
-                                Toast.makeText(context, R.string.restore_success, Toast.LENGTH_SHORT).show()
+                                val message =
+                                    if (restoredSources > 0) {
+                                        context.getString(R.string.restore_success_sources, restoredSources)
+                                    } else {
+                                        context.getString(R.string.restore_success)
+                                    }
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                             }
 
                             _backupRestoreProgress.value = null

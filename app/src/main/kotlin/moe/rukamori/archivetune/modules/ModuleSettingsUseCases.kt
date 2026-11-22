@@ -107,5 +107,7 @@ class ModuleSettingsUseCases @Inject constructor(
 }
 
 class RestoreModuleBackupUseCase @Inject constructor(private val repository: ModuleRepository) {
-    suspend operator fun invoke(bytes: ByteArray) = repository.restorePortable(bytes)
+    /** Returns the number of sources restored, so the caller can tell the user what came back. */
+    suspend operator fun invoke(bytes: ByteArray, keepEnabled: Boolean = true): Int =
+        repository.restorePortable(bytes, keepEnabled = keepEnabled)
 }

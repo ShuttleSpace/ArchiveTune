@@ -212,10 +212,18 @@ class ModuleRepository @Inject constructor(@ApplicationContext private val conte
         return withContext(Dispatchers.IO) { encode(registry, portable = true).toString().toByteArray() }
     }
 
-    suspend fun restorePortable(bytes: ByteArray) = withContext(Dispatchers.IO) {
+    /**
+     * Restores a portable registry. [keepEnabled] exists because a user restoring their own
+     * backup expects the sources they had enabled to keep working; the blanket "disable
+     * everything" default stays for callers importing a registry they did not create.
+     */
+    suspend fun restorePortable(bytes: ByteArray, keepEnabled: Boolean = false) = withContext(Dispatchers.IO) {
         if (bytes.size > MAX_REGISTRY_BYTES) throw ModuleException(ModuleFailure.INVALID_DOCUMENT)
         val restored = decode(JSONObject(bytes.toString(Charsets.UTF_8)), portable = true)
-        change(replacement = restored) { restored.copy(enabled = false, modules = restored.modules.map { it.copy(enabled = false) }) }
+        change(replacement = restored) {
+            if (keepEnabled) restored else restored.copy(enabled = false, modules = restored.modules.map { it.copy(enabled = false) })
+        }
+        restored.modules.size
     }
 
     private suspend fun prepare(bytes: ByteArray, origin: String, replacementId: String?,
