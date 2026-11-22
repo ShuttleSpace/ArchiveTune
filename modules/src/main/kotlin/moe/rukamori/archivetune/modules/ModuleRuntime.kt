@@ -245,7 +245,9 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
                     filename = "module-result.js",
                 )
                 if (result.isBlank() || result.length > ModuleHttpClient.MAX_BODY_BYTES) {
-                    throw ModuleException(ModuleFailure.EXECUTION, stage = ModuleLoadStage.PROVIDER, diagnosticCode = "INVALID_RESULT")
+                    // Name the call and the size: "INVALID_RESULT" alone tells nobody anything.
+                    val why = if (result.isBlank()) "EMPTY_RESULT" else "RESULT_TOO_LARGE (${result.length} bytes)"
+                    throw ModuleException(ModuleFailure.EXECUTION, stage = ModuleLoadStage.PROVIDER, diagnosticCode = "$function: $why")
                 }
                 val envelope = JSONObject(result)
                 if (envelope.optBoolean("failed")) {
@@ -265,7 +267,9 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
                     throw ModuleException(failure, stage = ModuleLoadStage.PROVIDER, diagnosticCode = detail)
                 }
                 if (!envelope.has("value") || envelope.isNull("value")) {
-                    throw ModuleException(ModuleFailure.EXECUTION, stage = ModuleLoadStage.PROVIDER, diagnosticCode = "INVALID_RESULT")
+                    // A provider that resolves null is a normal business answer (no copyright, no
+                    // stream), not a broken module — say which call returned nothing.
+                    throw ModuleException(ModuleFailure.EXECUTION, stage = ModuleLoadStage.PROVIDER, diagnosticCode = "$function: NULL_RESULT")
                 }
                 val value = envelope.get("value")
                 if (function == "getTrackStreamUrl" && value is JSONObject) session.host.domains?.let { domains ->

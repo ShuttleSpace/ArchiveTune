@@ -1165,7 +1165,7 @@
     <string name="playback_error_hint_timeout">服务器响应超时，稍后重试通常可以解决。</string>
     <string name="playback_error_hint_no_stream">ArchiveTune 无法获取此曲目的可播放流，请重试或换一首。</string>
     <string name="playback_error_hint_malformed_stream">音源返回了无法读取的数据，请稍后重试。</string>
-    <string name="playback_error_hint_decoder">此设备无法解码该曲目的音频。</string>
+    <string name="playback_error_hint_decoder">音频无法解码：文件可能损坏、返回的其实是网页，或格式不受支持。</string>
     <string name="playback_error_hint_http">服务器返回 HTTP %1$d，请稍后重试。</string>
     <string name="playback_error_hint_unknown">播放此曲目时出错。反馈问题时附上技术细节会更有帮助。</string>
     <string name="playback_error_show_details">显示技术细节</string>
@@ -1451,4 +1451,9 @@
     <string name="source_play_unavailable">该音源无法播放此曲</string>
     <string name="source_workbench_select">选择</string>
     <string name="source_workbench_selected">已选</string>
+    <string name="source_error_no_result">该音源没有返回数据：可能无版权、需要登录，或曲目已下架。</string>
+    <string name="source_error_too_large">该音源返回的数据超过单次上限。</string>
+    <string name="source_error_timeout">该音源响应超时。</string>
+    <string name="source_error_network">网络请求失败，请检查代理/DNS，或换一个音源。</string>
+    <string name="source_error_config">该音源需要登录或额外配置。</string>
 </resources>

@@ -400,16 +400,34 @@ class SourceWorkbenchViewModel
 
         // ModuleException's message is only the failure name; the useful part is the
         // diagnostic code and the underlying cause, which is what a debug trace needs.
+        /**
+         * Two-part message: a one-line reason a user can act on, then the raw technical
+         * detail (kept because it is what makes a bug report actionable).
+         */
         private fun describe(error: Throwable): String {
             val module = error as? moe.rukamori.archivetune.modules.ModuleException
             if (module == null) return error.message ?: error::class.java.simpleName
-            val parts = buildList {
+            val code = module.diagnosticCode.orEmpty()
+            val reason =
+                when {
+                    code.contains("NULL_RESULT") || code.contains("EMPTY_RESULT") ->
+                        R.string.source_error_no_result
+                    code.contains("RESULT_TOO_LARGE") -> R.string.source_error_too_large
+                    module.failure == moe.rukamori.archivetune.modules.ModuleFailure.TIMEOUT ->
+                        R.string.source_error_timeout
+                    module.failure == moe.rukamori.archivetune.modules.ModuleFailure.NETWORK ->
+                        R.string.source_error_network
+                    module.failure == moe.rukamori.archivetune.modules.ModuleFailure.INVALID_CONFIGURATION ->
+                        R.string.source_error_config
+                    else -> null
+                }
+            val detail = buildList {
                 add(module.failure.name)
-                module.diagnosticCode?.takeIf(String::isNotBlank)?.let(::add)
-                module.stage?.let { add("stage=${it.name}") }
+                code.takeIf(String::isNotBlank)?.let(::add)
+                module.stage?.let { add(it.name) }
                 module.cause?.let { add(it::class.java.simpleName + ": " + (it.message ?: "")) }
-            }
-            return parts.joinToString(" / ")
+            }.joinToString(" · ")
+            return reason?.let { context.getString(it) + "\n\n" + detail } ?: detail
         }
 
         private fun trace(line: String) {

@@ -620,7 +620,7 @@
     <string name="playback_error_hint_timeout">The server took too long to respond. Trying again usually helps.</string>
     <string name="playback_error_hint_no_stream">ArchiveTune couldn\'t get a playable stream for this track. Try again, or play something else.</string>
     <string name="playback_error_hint_malformed_stream">The stream source returned data that couldn\'t be read. Try again in a moment.</string>
-    <string name="playback_error_hint_decoder">This device couldn\'t decode the audio of this track.</string>
+    <string name="playback_error_hint_decoder">This audio could not be decoded: the file may be corrupt, the server may have returned a web page, or the format is unsupported.</string>
     <string name="playback_error_hint_http">The server responded with HTTP %1$d. Try again in a moment.</string>
     <string name="playback_error_hint_unknown">Something went wrong while playing this track. The technical details can help when reporting it.</string>
     <string name="playback_error_show_details">Show technical details</string>
@@ -1524,4 +1524,9 @@
     <string name="source_play_unavailable">This source cannot play this track</string>
     <string name="source_workbench_select">Select</string>
     <string name="source_workbench_selected">Selected</string>
+    <string name="source_error_no_result">The source returned no data for this request. It may lack the rights, need a login, or the track is gone.</string>
+    <string name="source_error_too_large">The source returned more data than one response may carry.</string>
+    <string name="source_error_timeout">The source did not answer in time.</string>
+    <string name="source_error_network">The network request failed. Check proxy/DNS, or try another source.</string>
+    <string name="source_error_config">This source needs a login or extra configuration.</string>
 </resources>
