@@ -39,6 +39,7 @@ import moe.rukamori.archivetune.db.entities.LibraryTopMixEntity
 import moe.rukamori.archivetune.db.entities.LibraryTopMixSongMap
 import moe.rukamori.archivetune.db.entities.LyricsEntity
 import moe.rukamori.archivetune.db.entities.LyricsSyncOffsetEntity
+import moe.rukamori.archivetune.db.entities.ModulePlayEntity
 import moe.rukamori.archivetune.db.entities.LocalMusicAlias
 import moe.rukamori.archivetune.db.entities.LibrarySongArtistMap
 import moe.rukamori.archivetune.db.entities.PlayCountEntity
@@ -66,13 +67,22 @@ import java.util.concurrent.Executor
 import kotlin.coroutines.resume
 
 private const val TAG = "MusicDatabase"
-private const val CURRENT_VERSION = 41
+private const val CURRENT_VERSION = 43
 
 class MusicDatabase(
     private val delegate: InternalDatabase,
 ) : DatabaseDao by delegate.dao {
     val recapDao: RecapDao
         get() = delegate.recapDao
+
+    val modulePlayDao: ModulePlayDao
+        get() = delegate.modulePlayDao
+
+    val moduleSongDao: ModuleSongDao
+        get() = delegate.moduleSongDao
+
+    val moduleSniffDao: ModuleSniffDao
+        get() = delegate.moduleSniffDao
 
     fun recapChanges(): Flow<Unit> = delegate.invalidationTracker.createFlow(
         "event", "song", "artist", "album", "song_artist_map", "song_album_map", "album_artist_map",
@@ -122,6 +132,7 @@ class MusicDatabase(
 
 @Database(
     entities = [
+            moe.rukamori.archivetune.db.entities.ModuleSniffEntity::class,
         SongEntity::class,
         ArtistEntity::class,
         AlbumEntity::class,
@@ -144,6 +155,7 @@ class MusicDatabase(
         LibraryTopMixEntity::class,
         LibraryTopMixSongMap::class,
         LyricsSyncOffsetEntity::class,
+        ModulePlayEntity::class,
     ],
     views = [
         LibrarySongArtistMap::class,
@@ -180,6 +192,11 @@ class MusicDatabase(
 abstract class InternalDatabase : RoomDatabase() {
     abstract val recapDao: RecapDao
     abstract val dao: DatabaseDao
+    abstract val modulePlayDao: ModulePlayDao
+
+    abstract val moduleSongDao: ModuleSongDao
+
+        abstract val moduleSniffDao: ModuleSniffDao
 
     companion object {
         const val DB_NAME = "song.db"

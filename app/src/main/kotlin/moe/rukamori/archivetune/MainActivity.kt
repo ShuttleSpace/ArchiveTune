@@ -1095,20 +1095,27 @@ class MainActivity : ComponentActivity() {
                     val playerFocusRequester = remember { FocusRequester() }
 
 
-                    val openSearch: () -> Unit = {
-                        onActiveChange(true)
-                        searchBarFocusRequester.requestFocus()
+                    // Fork: the shell search bar used to expand an inline YouTube/innertube
+                    // discovery overlay. Custom sources are searched on their own screen, so it
+                    // now opens the source workbench instead.
+                    val openSourceWorkbench: (String?) -> Unit = { text ->
+                        onActiveChange(false)
+                        navController.navigate(
+                            "settings/modules/workbench" +
+                                if (text.isNullOrBlank()) "" else "?query=${android.net.Uri.encode(text)}",
+                        )
                     }
+
+                    val openSearch: () -> Unit = { openSourceWorkbench(null) }
 
                     val onSearch: (String) -> Unit = {
                         if (it.isNotEmpty()) {
-                            onActiveChange(false)
-                            navController.navigate(onlineSearchResultRoute(it))
                             if (!pauseSearchHistory) {
                                 database.query {
                                     insert(SearchHistory(query = it))
                                 }
                             }
+                            openSourceWorkbench(it)
                         }
                     }
 

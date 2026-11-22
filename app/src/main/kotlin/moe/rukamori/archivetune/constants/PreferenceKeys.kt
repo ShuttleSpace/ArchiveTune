@@ -954,6 +954,9 @@ val HasPressedStarKey = booleanPreferencesKey("has_pressed_star")
 val RemindAfterKey = intPreferencesKey("remind_after")
 
 // Update settings
+// Fork: shows the draggable source-debug dock in the source workbench.
+val ShowSourceDebugDockKey = booleanPreferencesKey("showSourceDebugDock")
+
 val AutomaticUpdateCheckKey = booleanPreferencesKey("automaticUpdateCheck")
 val EnableUpdateNotificationKey = booleanPreferencesKey("enableUpdateNotification")
 val LastUpdateCheckKey = longPreferencesKey("lastUpdateCheck")

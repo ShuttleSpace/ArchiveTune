@@ -24,6 +24,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -47,6 +48,7 @@ import moe.rukamori.archivetune.constants.PlaylistSongSortType
 import moe.rukamori.archivetune.constants.PlaylistSuggestionSource
 import moe.rukamori.archivetune.constants.PlaylistSuggestionSourceKey
 import moe.rukamori.archivetune.db.MusicDatabase
+import moe.rukamori.archivetune.db.entities.ModuleSniffEntity
 import moe.rukamori.archivetune.db.entities.PlaylistSong
 import moe.rukamori.archivetune.extensions.filterBlockedArtists
 import moe.rukamori.archivetune.extensions.reversed
@@ -69,6 +71,13 @@ import moe.rukamori.archivetune.utils.reportException
 import java.text.Collator
 import java.util.Locale
 import javax.inject.Inject
+import moe.rukamori.archivetune.modules.InstalledModule
+import moe.rukamori.archivetune.modules.ModuleSongStore
+import moe.rukamori.archivetune.modules.StreamProbe
+import moe.rukamori.archivetune.modules.ModuleTrack
+import moe.rukamori.archivetune.modules.ModuleStream
+import moe.rukamori.archivetune.constants.InnerTubeCookieKey
+import moe.rukamori.archivetune.innertube.utils.hasYouTubeLoginCookie
 
 @HiltViewModel
 class LocalPlaylistViewModel
@@ -79,9 +88,108 @@ class LocalPlaylistViewModel
         private val syncUtils: SyncUtils,
         private val updatePlaylistCover: UpdatePlaylistCoverUseCase,
         private val removePlaylistCover: RemovePlaylistCoverUseCase,
+        private val moduleSongs: ModuleSongStore,
         savedStateHandle: SavedStateHandle,
     ) : ViewModel() {
         val playlistId = savedStateHandle.get<String>("playlistId")!!
+
+        /** Resolves a playlist entry that came from a custom source (id prefix `lt:`). */
+        suspend fun moduleStream(songId: String): ModuleStream? =
+            runCatching { moduleSongs.stream(songId) }
+                .onFailure { error ->
+                    val detail = (error as? moe.rukamori.archivetune.modules.ModuleException)?.let { "${it.failure}/${it.diagnosticCode}" }
+                    android.util.Log.d("LTSong", "stream $songId failed: ${error.message} $detail")
+                }
+                .getOrNull()
+                .also { if (it == null) android.util.Log.d("LTSong", "stream $songId -> null") }
+
+        /** Reason codes for entries that cannot be played; the UI maps them to labels. */
+        data class SniffState(
+            val running: Boolean = false,
+            val done: Int = 0,
+            val total: Int = 0,
+            val dead: Map<String, String> = emptyMap(),
+        )
+
+        private val _sniff = MutableStateFlow(SniffState())
+        val sniff: StateFlow<SniffState> = _sniff.asStateFlow()
+
+        init {
+            // Marks from the last check survive a restart; sniffing refreshes them.
+            viewModelScope.launch {
+                val saved = runCatching { database.moduleSniffDao.forPlaylist(playlistId) }.getOrDefault(emptyList())
+                if (saved.isNotEmpty() && !_sniff.value.running) {
+                    _sniff.value = _sniff.value.copy(dead = saved.associate { it.songId to it.status })
+                }
+            }
+        }
+
+        /**
+         * Checks every entry by resolving a stream URL. YouTube entries always fail here
+         * because the fork has no YouTube backend, which is exactly what we want to mark.
+         */
+        fun sniff() {
+            if (_sniff.value.running) return
+            viewModelScope.launch {
+                val songs = playlistSongs.value
+                // YouTube entries only play when an account is signed in; otherwise they
+                // are dead weight and should be flagged for replacement.
+                val loggedIn =
+                    runCatching {
+                        hasYouTubeLoginCookie(context.dataStore.data.first()[InnerTubeCookieKey])
+                    }.getOrDefault(false)
+                _sniff.value = SniffState(running = true, total = songs.size)
+                val dead = mutableMapOf<String, String>()
+                songs.forEachIndexed { index, entry ->
+                    val id = entry.song.id
+                    val reason =
+                        when {
+                            ModuleSongStore.isModuleSong(id) ->
+                                // Per-entry timeout: one hung source must not stall the whole sweep.
+                                runCatching {
+                                    withTimeout(25_000) {
+                                        val stream = moduleSongs.stream(id)
+                                        when {
+                                            stream == null -> "no_stream"
+                                            StreamProbe.isPlayable(stream) -> null
+                                            else -> "unplayable"
+                                        }
+                                    }
+                                }.getOrElse { "no_stream" }
+                            loggedIn -> null
+                            else -> "no_source"
+                        }
+                    if (reason != null) dead[id] = reason
+                    _sniff.value = _sniff.value.copy(done = index + 1, dead = dead.toMap())
+                }
+                _sniff.value = _sniff.value.copy(running = false)
+                runCatching {
+                    database.moduleSniffDao.replace(
+                        playlistId = playlistId,
+                        rows =
+                            dead.map { (songId, status) ->
+                                ModuleSniffEntity(
+                                    playlistId = playlistId,
+                                    songId = songId,
+                                    status = status,
+                                    checkedAt = System.currentTimeMillis(),
+                                )
+                            },
+                    )
+                }
+            }
+        }
+
+        fun clearSniff() {
+            _sniff.value = SniffState()
+            viewModelScope.launch {
+                val saved = runCatching { database.moduleSniffDao.forPlaylist(playlistId) }.getOrDefault(emptyList())
+                if (saved.isNotEmpty()) {
+                    _sniff.value = _sniff.value.copy(dead = saved.associate { it.songId to it.status })
+                }
+            }
+        }
+
         val playlist =
             database
                 .playlist(playlistId)

@@ -6,5 +6,11 @@
   ~ Do not remove or alter this notice. - Per GPL-3.0 Section 4 & Section 5
 -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false" />
+    <!-- Custom sources are user-installed providers that often only speak plain http -->
+    <base-config cleartextTrafficPermitted="true" />
+    <!-- Local loopback module installs (adb reverse) need plain http -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
 </network-security-config>

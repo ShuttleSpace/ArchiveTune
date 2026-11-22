@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -199,15 +200,20 @@ fun HomeScreen(
                     messageResId = R.string.no_results_found,
                     actionResId = R.string.retry,
                     onAction = { viewModel.onAction(HomeAction.Refresh) },
+                    onOpenSources = { navController.navigate("settings/modules/workbench") },
                 )
             }
 
             is HomeScreenState.Error -> {
+                // Fork: with no YouTube account there is simply nothing to show, which the
+                // engine reports as a generic error. Say that instead of "unknown error".
                 HomeStatePane(
-                    iconResId = R.drawable.info,
-                    messageResId = state.messageResId,
+                    iconResId = R.drawable.music_note,
+                    messageResId = null,
+                    messageOverride = stringResource(R.string.home_empty_sources_message),
                     actionResId = R.string.retry,
                     onAction = { viewModel.onAction(HomeAction.Refresh) },
+                    onOpenSources = { navController.navigate("settings/modules/workbench") },
                 )
             }
 
@@ -239,6 +245,8 @@ private fun HomeStatePane(
     @StringRes actionResId: Int? = null,
     showLoadingIndicator: Boolean = false,
     onAction: (() -> Unit)? = null,
+    onOpenSources: (() -> Unit)? = null,
+    messageOverride: String? = null,
 ) {
     Box(
         contentAlignment = Alignment.Center,
@@ -273,10 +281,11 @@ private fun HomeStatePane(
                         )
                     }
                 }
-                messageResId?.let {
+                val message = messageOverride ?: messageResId?.let { stringResource(it) }
+                if (message != null) {
                     Spacer(Modifier.height(24.dp))
                     Text(
-                        text = stringResource(it),
+                        text = message,
                         style = MaterialTheme.typography.headlineSmallEmphasized,
                         color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center,
@@ -289,6 +298,14 @@ private fun HomeStatePane(
                         shapes = ButtonDefaults.shapes(),
                     ) {
                         Text(stringResource(actionResId))
+                    }
+                }
+                // Fork feature: sources are the only content provider, so the empty and
+                // error panes must lead somewhere instead of dead-ending.
+                if (onOpenSources != null) {
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = onOpenSources) {
+                        Text(stringResource(R.string.source_workbench_settings_title))
                     }
                 }
             }

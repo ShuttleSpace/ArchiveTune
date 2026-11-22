@@ -247,6 +247,17 @@ class PlayerConnection(
         service.startRadioSeamlessly()
     }
 
+    fun play() {
+        player.play()
+    }
+
+    /** Replace the queue with a single item and start it: the semantics of "试听". */
+    fun playNow(item: MediaItem) {
+        player.setMediaItem(item)
+        player.prepare()
+        player.play()
+    }
+
     fun playNext(item: MediaItem) = playNext(listOf(item))
 
     fun playNext(items: List<MediaItem>) {

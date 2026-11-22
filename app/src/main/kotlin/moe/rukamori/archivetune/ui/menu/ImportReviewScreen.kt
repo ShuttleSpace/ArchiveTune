@@ -482,13 +482,14 @@ internal fun ImportCandidateItem(
     showArtwork: Boolean,
     selected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
         onClick = onClick,
         shape = MaterialTheme.shapes.medium,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp),
     ) {

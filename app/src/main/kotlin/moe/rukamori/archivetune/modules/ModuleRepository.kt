@@ -165,9 +165,11 @@ class ModuleRepository @Inject constructor(@ApplicationContext private val conte
             }
             is ModuleImport.Provider -> {
                 change { registry ->
+                    // Fork: module id IS the identity. Match on it alone so re-importing the
+                    // same source replaces the row instead of adding a second, dead duplicate
+                    // (file and URL imports have different origins, which used to never match).
                     val existing = registry.modules.firstOrNull { it.id == pending.replacementId }
-                        ?: registry.modules.firstOrNull { it.manifest.id == pending.document.manifest.id &&
-                            (it.origin == pending.document.origin || it.updateUrl == pending.document.updateUrl) }
+                        ?: registry.modules.firstOrNull { it.manifest.id == pending.document.manifest.id }
                     if (existing != null && existing.manifest.id != pending.document.manifest.id) throw ModuleException(ModuleFailure.INVALID_DOCUMENT)
                     val manifest = pending.document.manifest
                     val configuration = manifest.settings.associate { field ->

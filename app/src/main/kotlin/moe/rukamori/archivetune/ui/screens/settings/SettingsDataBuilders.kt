@@ -78,6 +78,15 @@ fun buildSettingsContent(
             accentColor = MaterialTheme.colorScheme.secondary,
             onClick = { navController.navigate("settings/modules") },
         )
+    val sourceWorkbench =
+        SettingsItem(
+            key = "source_workbench",
+            icon = painterResource(R.drawable.search),
+            title = stringResource(R.string.source_workbench_settings_title),
+            subtitle = stringResource(R.string.source_workbench_settings_subtitle),
+            accentColor = MaterialTheme.colorScheme.primary,
+            onClick = { navController.navigate("settings/modules/workbench") },
+        )
     val canvas =
         SettingsItem(
             key = "canvas",
@@ -297,7 +306,7 @@ fun buildSettingsContent(
                 SettingsGroup(
                     key = "integration",
                     title = stringResource(R.string.integration),
-                    items = listOf(androidAuto, integration, modules, aiIntegration, internet),
+                    items = listOf(androidAuto, integration, modules, sourceWorkbench, aiIntegration, internet),
                 ),
             )
             add(

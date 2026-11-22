@@ -90,6 +90,7 @@ import moe.rukamori.archivetune.LocalDownloadUtil
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.modules.ModuleSongStore
 import moe.rukamori.archivetune.constants.AppBarHeight
 import moe.rukamori.archivetune.constants.PlaylistEditLockKey
 import moe.rukamori.archivetune.constants.PlaylistSongSortType
@@ -162,6 +163,7 @@ fun LocalPlaylistScreen(
 
     val playlist by viewModel.playlist.collectAsStateWithLifecycle()
     val songs by viewModel.playlistSongs.collectAsStateWithLifecycle()
+    val sniffState by viewModel.sniff.collectAsStateWithLifecycle()
     val viewCounts by viewModel.viewCounts.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     val coverState by viewModel.coverState.collectAsStateWithLifecycle()
@@ -186,7 +188,29 @@ fun LocalPlaylistScreen(
     }
 
     val coroutineScope = rememberCoroutineScope()
+    // `lt:` items are queued without a URL and resolved by CustomSourceMediaSource when the
+    // player reaches them, so module tracks take part in bulk play, shuffle and skip like any
+    // other song.
+    val queueItems =
+        songs.map { item ->
+            if (ModuleSongStore.isModuleSong(item.song.id)) {
+                ModuleSongStore.lazyItem(item.song.song)
+            } else {
+                item.song.toMediaItem()
+            }
+        }
     val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(sniffState.running) {
+        if (sniffState.running) {
+            snackbarHostState.showSnackbar(context.getString(R.string.playlist_sniff_running))
+        } else if (sniffState.total > 0) {
+            val dead = sniffState.dead.size
+            snackbarHostState.showSnackbar(
+                context.getString(if (dead == 0) R.string.playlist_sniff_all_ok else R.string.playlist_sniff_result, dead),
+            )
+        }
+    }
+
     var sourceChangeTarget by remember { mutableStateOf<PlaylistSong?>(null) }
     var sourceChangeSaving by remember { mutableStateOf(false) }
 
@@ -531,7 +555,7 @@ fun LocalPlaylistScreen(
                         }.onFailure {
                             withContext(Dispatchers.Main) {
                                 snackbarHostState.showSnackbar(
-                                    message = context.getString(R.string.error_unknown),
+                                    message = context.getString(R.string.source_play_unavailable),
                                     withDismissAction = true,
                                 )
                             }
@@ -634,9 +658,7 @@ fun LocalPlaylistScreen(
                                                 ListQueue(
                                                     title = playlist.playlist.name,
                                                     items =
-                                                        songs
-                                                            .shuffled()
-                                                            .map { it.song.toMediaItem() },
+                                                        queueItems.shuffled(),
                                                 ),
                                             )
                                         }
@@ -649,7 +671,7 @@ fun LocalPlaylistScreen(
                                             playerConnection.playQueue(
                                                 ListQueue(
                                                     title = playlist.playlist.name,
-                                                    items = songs.map { it.song.toMediaItem() },
+                                                    items = queueItems,
                                                 ),
                                             )
                                         }
@@ -795,7 +817,22 @@ fun LocalPlaylistScreen(
                                         )
                                     }
 
+                                    MediaDetailIconAction(
+                                        icon = R.drawable.search,
+                                        contentDescription = R.string.playlist_sniff,
+                                        contentColor = contentColor,
+                                        onClick = {
+                                            if (sniffState.running) viewModel.clearSniff() else viewModel.sniff()
+                                        },
+                                    )
+
                                     if (editable) {
+                                        MediaDetailIconAction(
+                                            icon = R.drawable.add,
+                                            contentDescription = R.string.source_workbench_add_to_playlist,
+                                            contentColor = contentColor,
+                                            onClick = { navController.navigate("local_playlist/${viewModel.playlistId}/add") },
+                                        )
                                         MediaDetailIconAction(
                                             icon = R.drawable.edit,
                                             contentDescription = R.string.edit_playlist,
@@ -875,7 +912,7 @@ fun LocalPlaylistScreen(
                                     if (remoteResult.isFailure) {
                                         withContext(Dispatchers.Main) {
                                             snackbarHostState.showSnackbar(
-                                                message = context.getString(R.string.error_unknown),
+                                                message = context.getString(R.string.source_play_unavailable),
                                                 withDismissAction = true,
                                             )
                                         }
@@ -923,6 +960,17 @@ fun LocalPlaylistScreen(
                                 isPlaying = isPlaying,
                                 showInLibraryIcon = true,
                                 trailingContent = {
+                                    val deadReason = sniffState.dead[song.song.id]
+                                    if (deadReason != null) {
+                                        TextButton(
+                                            onClick = { sourceChangeTarget = song },
+                                        ) {
+                                            Text(
+                                                stringResource(R.string.playlist_replace),
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                        }
+                                    }
                                     IconButton(
                                         onClick = {
                                             menuState.show {
@@ -973,13 +1021,25 @@ fun LocalPlaylistScreen(
                                         .fillMaxWidth()
                                         .combinedClickable(
                                             onClick = {
-                                                if (song.song.id == mediaMetadata?.id) {
+                                                if (ModuleSongStore.isModuleSong(song.song.id)) {
+                                                    coroutineScope.launch {
+                                                        val stream = viewModel.moduleStream(song.song.id)
+                                                        if (stream == null) {
+                                                            snackbarHostState.showSnackbar(
+                                                                message = context.getString(R.string.source_play_unavailable),
+                                                                withDismissAction = true,
+                                                            )
+                                                        } else {
+                                                            playerConnection.playNow(ModuleSongStore.mediaItem(song.song.song, stream))
+                                                        }
+                                                    }
+                                                } else if (song.song.id == mediaMetadata?.id) {
                                                     playerConnection.player.togglePlayPause()
                                                 } else {
                                                     playerConnection.playQueue(
                                                         ListQueue(
                                                             title = playlist!!.playlist.name,
-                                                            items = songs.map { it.song.toMediaItem() },
+                                                            items = queueItems,
                                                             startIndex = songs.indexOfFirst { it.map.id == song.map.id },
                                                         ),
                                                     )
@@ -1032,6 +1092,17 @@ fun LocalPlaylistScreen(
                                 isPlaying = isPlaying,
                                 showInLibraryIcon = true,
                                 trailingContent = {
+                                    val deadReason = sniffState.dead[song.song.id]
+                                    if (deadReason != null) {
+                                        TextButton(
+                                            onClick = { sourceChangeTarget = song },
+                                        ) {
+                                            Text(
+                                                stringResource(R.string.playlist_replace),
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                        }
+                                    }
                                     IconButton(
                                         onClick = {
                                             menuState.show {
@@ -1066,14 +1137,26 @@ fun LocalPlaylistScreen(
                                         .fillMaxWidth()
                                         .combinedClickable(
                                             onClick = {
-                                                if (!selection) {
+                                                if (ModuleSongStore.isModuleSong(song.song.id)) {
+                                                    coroutineScope.launch {
+                                                        val stream = viewModel.moduleStream(song.song.id)
+                                                        if (stream == null) {
+                                                            snackbarHostState.showSnackbar(
+                                                                message = context.getString(R.string.source_play_unavailable),
+                                                                withDismissAction = true,
+                                                            )
+                                                        } else {
+                                                            playerConnection.playNow(ModuleSongStore.mediaItem(song.song.song, stream))
+                                                        }
+                                                    }
+                                                } else if (!selection) {
                                                     if (song.song.id == mediaMetadata?.id) {
                                                         playerConnection.player.togglePlayPause()
                                                     } else {
                                                         playerConnection.playQueue(
                                                             ListQueue(
                                                                 title = playlist!!.playlist.name,
-                                                                items = songs.map { it.song.toMediaItem() },
+                                                                items = queueItems,
                                                                 startIndex = index,
                                                             ),
                                                         )

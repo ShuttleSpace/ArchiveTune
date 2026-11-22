@@ -371,6 +371,12 @@ class MusicService :
     @Inject
     lateinit var moduleAudio: ResolveModuleAudioUseCase
 
+    /** Consecutive custom-source items skipped because they could not resolve. */
+    private var ltSkipStreak = 0
+
+    @Inject
+    lateinit var moduleSongs: moe.rukamori.archivetune.modules.ModuleSongStore
+
     @Inject
     lateinit var moduleBindings: ModuleDownloadRepository
 
@@ -7100,6 +7106,7 @@ class MusicService :
     override fun onIsPlayingChanged(isPlaying: Boolean) {
         super.onIsPlayingChanged(isPlaying)
         if (isPlaying) {
+            ltSkipStreak = 0
             scheduleCrossfade()
         }
         updateAudiblePlaybackRecovery()
@@ -7501,6 +7508,24 @@ class MusicService :
 
     override fun onPlayerError(error: PlaybackException) {
         super.onPlayerError(error)
+        // A custom-source queue item that cannot resolve (restricted or expired track) must not
+        // stop the queue with a blocking dialog: skip it and keep playing.
+        val failedId = player.currentMediaItem?.mediaId.orEmpty()
+        if (failedId.startsWith("lt:")) {
+            // seekToNextMediaItem alone does not re-prepare a player that is already in the error
+            // state, so prepare() is required or the queue stalls here.
+            if (player.hasNextMediaItem() && ltSkipStreak < 25) {
+                ltSkipStreak++
+                android.util.Log.d("LTSkip", "skipping unplayable $failedId: ${error.errorCodeName}")
+                player.seekToNextMediaItem()
+                player.prepare()
+                player.play()
+            } else {
+                android.util.Log.d("LTSkip", "stopping after $ltSkipStreak unplayable custom-source items")
+                player.pause()
+            }
+            return
+        }
         val snapshot =
             capturePlaybackRecoverySnapshot() ?: run {
                 surfaceUnrecoveredPlaybackError(error)
@@ -8042,14 +8067,21 @@ class MusicService :
         }.getOrDefault(false)
 
     private fun createMediaSourceFactory(): androidx.media3.exoplayer.source.MediaSource.Factory =
-        ModuleMediaSourceFactory(
-            delegate = DefaultMediaSourceFactory(createDataSourceFactory(), DefaultExtractorsFactory()),
-            resolver = moduleAudio,
-            bindings = moduleBindings,
+        // Outermost first: `lt:` queue items never reach the module-matching path.
+        CustomSourceMediaSourceFactory(
+            delegate =
+                ModuleMediaSourceFactory(
+                    delegate = DefaultMediaSourceFactory(createDataSourceFactory(), DefaultExtractorsFactory()),
+                    resolver = moduleAudio,
+                    bindings = moduleBindings,
+                    storage = moduleStorage,
+                    completedDownload = { id ->
+                        moduleDownloadUtil.downloadManager.downloadIndex.getDownload(id)?.state == androidx.media3.exoplayer.offline.Download.STATE_COMPLETED
+                    },
+                    selected = ::onModuleAudioSelected,
+                ),
+            store = moduleSongs,
             storage = moduleStorage,
-            completedDownload = { id ->
-                moduleDownloadUtil.downloadManager.downloadIndex.getDownload(id)?.state == androidx.media3.exoplayer.offline.Download.STATE_COMPLETED
-            },
             selected = ::onModuleAudioSelected,
         )
 
@@ -8465,6 +8497,11 @@ class MusicService :
     }
 
     private fun MediaItem.toPersistableMetadata(): moe.rukamori.archivetune.models.MediaMetadata? {
+        // Custom-source tracks (`lt:` ids) carry a short-lived stream URL, so restoring one
+        // after a restart can only produce an item that buffers forever. Keep them out of the
+        // persisted queue instead.
+        if (mediaId.startsWith("lt:")) return null
+
         val tagged = metadata
         if (tagged != null) return tagged
 

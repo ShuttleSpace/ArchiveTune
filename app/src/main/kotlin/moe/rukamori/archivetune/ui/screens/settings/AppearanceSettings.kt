@@ -57,6 +57,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.datastore.preferences.core.edit
+import kotlinx.coroutines.launch
+import moe.rukamori.archivetune.constants.AppLanguageKey
+import moe.rukamori.archivetune.constants.UseSystemLanguageKey
+import moe.rukamori.archivetune.utils.dataStore
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -608,6 +615,55 @@ fun AppearanceSettings(navController: NavController) {
                 .padding(bottom = SettingsDimensions.ScreenBottomPadding),
         ) {
             PreferenceGroup(title = stringResource(R.string.theme)) {
+                item {
+                    // Fork feature: upstream only exposes the app language through the
+                    // system's per-app language (Android 13+), so add an in-app entry.
+                    var showLanguage by remember { mutableStateOf(false) }
+                    val languageContext = LocalContext.current
+                    val languageScope = rememberCoroutineScope()
+                    PreferenceEntry(
+                        title = { Text(stringResource(R.string.source_workbench_language)) },
+                        description = stringResource(R.string.source_workbench_language_desc),
+                        icon = { Icon(painterResource(R.drawable.palette), null) },
+                        onClick = { showLanguage = true },
+                    )
+                    if (showLanguage) {
+                        val options =
+                            listOf(
+                                "" to stringResource(R.string.source_workbench_language_system),
+                                "en" to "English",
+                                "zh-CN" to "简体中文",
+                                "ja" to "日本語",
+                            )
+                        AlertDialog(
+                            onDismissRequest = { showLanguage = false },
+                            title = { Text(stringResource(R.string.source_workbench_language)) },
+                            text = {
+                                Column {
+                                    options.forEach { (tag, label) ->
+                                        TextButton(
+                                            onClick = {
+                                                showLanguage = false
+                                                languageScope.launch {
+                                                    languageContext.dataStore.edit { preferences ->
+                                                        if (tag.isBlank()) {
+                                                            preferences[UseSystemLanguageKey] = true
+                                                        } else {
+                                                            preferences[AppLanguageKey] = tag
+                                                            preferences[UseSystemLanguageKey] = false
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                        ) { Text(label) }
+                                    }
+                                }
+                            },
+                            confirmButton = {},
+                        )
+                    }
+                }
+
                 item {
                     SwitchPreference(
                         title = { Text(stringResource(R.string.enable_dynamic_theme)) },

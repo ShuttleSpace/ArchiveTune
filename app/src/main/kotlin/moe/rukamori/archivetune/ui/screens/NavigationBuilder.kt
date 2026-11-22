@@ -113,15 +113,9 @@ fun NavGraphBuilder.navigationBuilder(
         LibraryScreen(navController = navController, scrollBehavior = libraryScrollBehavior)
     }
     composable(Screens.Search.route) {
-        SearchScreen(
-            navController = navController,
-            onSearchClick = {
-                navController.currentBackStackEntry
-                    ?.savedStateHandle
-                    ?.set("openSearch", true)
-            },
-            headerScrollConnection = searchScrollConnection,
-        )
+        // Fork feature: the YouTube discovery/search screen is gone (its tabs are all
+        // innertube-backed and error out), so the search tab IS the source workbench.
+        moe.rukamori.archivetune.ui.screens.sourceworkbench.SourceWorkbenchScreen(navController = navController, showBack = false)
     }
     composable("local_songs") {
         LocalSongScreen(navController)
@@ -460,6 +454,32 @@ fun NavGraphBuilder.navigationBuilder(
     }
     composable("settings/modules") {
         moe.rukamori.archivetune.ui.screens.settings.ModulesSettings(navController)
+    }
+    composable(
+        route = "settings/modules/workbench?query={query}",
+        arguments =
+            listOf(
+                navArgument("query") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+    ) { entry ->
+        moe.rukamori.archivetune.ui.screens.sourceworkbench.SourceWorkbenchScreen(
+            navController = navController,
+            initialQuery = entry.arguments?.getString("query"),
+        )
+    }
+    // Fork feature: add custom-source tracks to a user playlist.
+    composable(
+        route = "local_playlist/{playlistId}/add",
+        arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),
+    ) { entry ->
+        moe.rukamori.archivetune.ui.screens.sourceworkbench.SourceWorkbenchScreen(
+            navController = navController,
+            playlistId = entry.arguments?.getString("playlistId"),
+        )
     }
     composable("settings/canvas") {
         CanvasSettings(navController)

@@ -13,12 +13,23 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import moe.rukamori.archivetune.constants.HistorySource
 import moe.rukamori.archivetune.db.MusicDatabase
+import moe.rukamori.archivetune.db.entities.AlbumEntity
+import moe.rukamori.archivetune.db.entities.ArtistEntity
+import moe.rukamori.archivetune.db.entities.Event
 import moe.rukamori.archivetune.db.entities.EventWithSong
+import moe.rukamori.archivetune.db.entities.ModulePlayEntity
+import moe.rukamori.archivetune.db.entities.Song
+import moe.rukamori.archivetune.db.entities.SongEntity
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
 import moe.rukamori.archivetune.innertube.YouTube
 import moe.rukamori.archivetune.innertube.pages.HistoryPage
 import moe.rukamori.archivetune.utils.reportException
@@ -39,6 +50,15 @@ class HistoryViewModel
         val remoteHistoryState: StateFlow<RemoteHistoryUiState> = _remoteHistoryState
         private val loadedEvents = mutableListOf<EventWithSong>()
         val events = MutableStateFlow<Map<DateAgo, List<EventWithSong>>>(emptyMap())
+        /**
+         * Fork feature: playback history of custom-source (module) tracks. These are transient
+         * MediaItems, not Room `Song` rows, so they live in their own table.
+         */
+        val modulePlays: StateFlow<List<ModulePlayEntity>> =
+            database.modulePlayDao
+                .recent(50)
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
         val isLoadingMoreEvents = MutableStateFlow(false)
         val canLoadMoreEvents = MutableStateFlow(true)
 
@@ -48,6 +68,65 @@ class HistoryViewModel
 
         init {
             loadMoreEvents()
+            // Fork feature: fold custom-source (module) plays into the same date groups.
+            viewModelScope.launch {
+                modulePlays.collect { plays ->
+                    moduleEvents = plays.map(::moduleEvent)
+                    regroup()
+                }
+            }
+        }
+
+        private var moduleEvents: List<EventWithSong> = emptyList()
+
+        private fun regroup() {
+            events.value = (loadedEvents + moduleEvents).groupEventsByDate()
+        }
+
+        /** Module tracks are transient MediaItems, so they are synthesized into the same shape. */
+        private fun moduleEvent(play: ModulePlayEntity): EventWithSong {
+            val artists =
+                play.artists
+                    .split(",")
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+            return EventWithSong(
+                event =
+                    Event(
+                        // Negative synthetic id: the list keys on event.id, and all
+                        // unsaved rows default to 0, which crashes LazyColumn.
+                        id = -Math.abs(play.mediaId.hashCode()).toLong() - 1L,
+                        songId = "module:${play.mediaId}",
+                        timestamp =
+                            LocalDateTime.ofInstant(
+                                Instant.ofEpochMilli(play.playedAt),
+                                ZoneId.systemDefault(),
+                            ),
+                        playTime = (play.durationSeconds ?: 0) * 1000L,
+                    ),
+                song =
+                    Song(
+                        song =
+                            SongEntity(
+                                id = "module:${play.mediaId}",
+                                title = play.title,
+                                duration = play.durationSeconds ?: -1,
+                                thumbnailUrl = play.thumbnailUrl,
+                                albumName = play.album,
+                            ),
+                        artists = artists.map { ArtistEntity(id = it, name = it) },
+                        album =
+                            play.album?.let {
+                                AlbumEntity(
+                                    id = "module-album:$it",
+                                    title = it,
+                                    songCount = 1,
+                                    duration = play.durationSeconds ?: 0,
+                                    thumbnailUrl = play.thumbnailUrl,
+                                )
+                            },
+                    ),
+            )
         }
 
         fun loadMoreEvents() {
@@ -58,7 +137,7 @@ class HistoryViewModel
                 try {
                     val page = database.events(limit = HISTORY_PAGE_SIZE, offset = loadedEvents.size)
                     loadedEvents += page
-                    events.value = loadedEvents.groupEventsByDate()
+                    regroup()
                     canLoadMoreEvents.value = page.size == HISTORY_PAGE_SIZE
                 } catch (exception: CancellationException) {
                     throw exception

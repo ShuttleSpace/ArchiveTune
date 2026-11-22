@@ -81,6 +81,11 @@ import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.PreferenceEntry
 import moe.rukamori.archivetune.ui.component.PreferenceGroup
+import androidx.datastore.preferences.core.edit
+import kotlinx.coroutines.launch
+import moe.rukamori.archivetune.utils.dataStore
+import moe.rukamori.archivetune.utils.get
+import moe.rukamori.archivetune.constants.ShowSourceDebugDockKey
 import moe.rukamori.archivetune.ui.component.SwitchPreference
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.utils.makeTimeString
@@ -173,6 +178,25 @@ fun DebugSettings(navController: NavController) {
                         icon = { Icon(painterResource(R.drawable.stats), null) },
                         checked = showNerdStats,
                         onCheckedChange = onShowNerdStatsChange,
+                    )
+                }
+
+                item {
+                    val debugContext = androidx.compose.ui.platform.LocalContext.current
+                    val debugScope = androidx.compose.runtime.rememberCoroutineScope()
+                    var dockEnabled by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
+                    androidx.compose.runtime.LaunchedEffect(Unit) {
+                        dockEnabled = debugContext.dataStore.get(ShowSourceDebugDockKey, true)
+                    }
+                    SwitchPreference(
+                        title = { Text(stringResource(R.string.source_workbench_debug_dock_title)) },
+                        description = stringResource(R.string.source_workbench_debug_dock_desc),
+                        icon = { Icon(painterResource(R.drawable.stats), null) },
+                        checked = dockEnabled,
+                        onCheckedChange = { value ->
+                            dockEnabled = value
+                            debugScope.launch { debugContext.dataStore.edit { it[ShowSourceDebugDockKey] = value } }
+                        },
                     )
                 }
 
