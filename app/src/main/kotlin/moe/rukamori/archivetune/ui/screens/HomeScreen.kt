@@ -13,6 +13,8 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -257,7 +259,12 @@ private fun HomeStatePane(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(32.dp),
+            // Short landscape windows cannot fit the icon, copy and both actions; scrolling keeps
+            // the actions reachable instead of clipping them.
+            modifier =
+                Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 32.dp, vertical = 16.dp),
         ) {
             if (showLoadingIndicator) {
                 ContainedLoadingIndicator()
