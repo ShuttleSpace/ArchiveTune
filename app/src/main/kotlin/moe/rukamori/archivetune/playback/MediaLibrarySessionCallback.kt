@@ -597,6 +597,7 @@ class MediaLibrarySessionCallback
                                         drawableUri(R.drawable.history),
                                         MediaMetadata.MEDIA_TYPE_PLAYLIST,
                                     ),
+                                    sourcesFolderItem(),
                                 )
                             } else {
                                 listOf(
@@ -659,6 +660,22 @@ class MediaLibrarySessionCallback
                                         drawableUri(R.drawable.queue_music),
                                         MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS,
                                     ),
+                                    sourcesFolderItem(),
+                                )
+                            }
+                        }
+
+                        MusicService.SOURCES -> {
+                            // Custom sources have no browsable catalogue of their own (search is
+                            // query driven), so the tree exposes the source tracks we already
+                            // stored, grouped by source name.
+                            database.moduleSongDao.moduleSourceNames().map { name ->
+                                browsableMediaItem(
+                                    "${MusicService.SOURCES}/$name",
+                                    name,
+                                    null,
+                                    drawableUri(R.drawable.queue_music),
+                                    MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS,
                                 )
                             }
                         }
@@ -906,6 +923,16 @@ class MediaLibrarySessionCallback
 
                         else -> {
                             when {
+                                // Custom-source tracks we already stored. Sources have no browsable
+                                // catalogue of their own (search is query driven), so the tree exposes
+                                // what we have, grouped by source name. Playback goes through the
+                                // `lt:` scheme resolved by CustomSourceMediaSource.
+                                parentId.startsWith("${MusicService.SOURCES}/") -> {
+                                    database.moduleSongDao
+                                        .moduleSongsOf(parentId.removePrefix("${MusicService.SOURCES}/"))
+                                        .map { moe.rukamori.archivetune.modules.ModuleSongStore.lazyItem(it) }
+                                }
+
                                 parentId.startsWith("${MusicService.SPOTIFY_PLAYLIST}/") -> {
                                     val path = parentId.pathSegments()
                                     val playlistId = path.getOrNull(1)
@@ -2379,6 +2406,16 @@ class MediaLibrarySessionCallback
             .appendPath(context.resources.getResourceTypeName(id))
             .appendPath(context.resources.getResourceEntryName(id))
             .build()
+
+        /** Fork feature: entry point for custom-source tracks in the browsable tree. */
+        private fun sourcesFolderItem() =
+            browsableMediaItem(
+                MusicService.SOURCES,
+                context.getString(R.string.source_workbench_sources_label),
+                null,
+                drawableUri(R.drawable.queue_music),
+                MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS,
+            )
 
         private fun browsableMediaItem(
             id: String,

@@ -8915,6 +8915,9 @@ class MusicService :
         const val HOME_MIXES_AND_RADIOS = "home_mixes_and_radios"
         const val QUICK_PICKS = "quick_picks"
         const val RECENT = "recent"
+
+        /** Browsable folder for custom-source tracks (fork feature). */
+        const val SOURCES = "sources"
         const val LIKED = "liked"
         const val DOWNLOADED = "downloaded"
         const val SONG = "song"

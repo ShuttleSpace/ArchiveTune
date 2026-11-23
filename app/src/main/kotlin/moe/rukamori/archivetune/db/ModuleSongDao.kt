@@ -34,4 +34,11 @@ interface ModuleSongDao {
 
     @Insert
     suspend fun insert(map: PlaylistSongMap)
+
+    /** Source names for the browsable "sources" tree; albumArtist holds the module display name. */
+    @Query("SELECT DISTINCT albumArtist FROM song WHERE id LIKE 'lt:%' AND albumArtist IS NOT NULL ORDER BY albumArtist")
+    suspend fun moduleSourceNames(): List<String>
+
+    @Query("SELECT * FROM song WHERE id LIKE 'lt:%' AND albumArtist = :source ORDER BY title")
+    suspend fun moduleSongsOf(source: String): List<SongEntity>
 }
