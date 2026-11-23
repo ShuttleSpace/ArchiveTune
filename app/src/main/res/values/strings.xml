@@ -1530,4 +1530,6 @@
     <string name="source_error_network">The network request failed. Check proxy/DNS, or try another source.</string>
     <string name="source_error_config">This source needs a login or extra configuration.</string>
     <string name="restore_success_sources">Backup restored · %1$d source(s)</string>
+    <string name="modules_page_previous">Previous page</string>
+    <string name="modules_page_next">Next page</string>
 </resources>

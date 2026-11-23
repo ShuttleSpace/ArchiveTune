@@ -29,6 +29,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -220,9 +221,33 @@ private fun ModuleSettingsContent(state: ModuleSettingsState, onAction: (ModuleS
     }
 }
 
+private const val MODULE_PAGE_SIZE = 20
+private const val MODULE_PAGE_BUTTONS = 5
+
+private fun ModuleSettingsUiModel.paged(): Boolean = rows.size > MODULE_PAGE_SIZE
+
+/**
+ * Page numbers to show: a window of at most [MODULE_PAGE_BUTTONS] around [page], clamped so the
+ * last page never leaves a short tail when there are enough pages to fill the window.
+ */
+internal fun modulePageWindow(page: Int, pageCount: Int): IntRange {
+    if (pageCount <= 0) return IntRange.EMPTY
+    val start = (page - MODULE_PAGE_BUTTONS / 2).coerceAtLeast(0)
+        .coerceAtMost((pageCount - MODULE_PAGE_BUTTONS).coerceAtLeast(0))
+    return start until minOf(start + MODULE_PAGE_BUTTONS, pageCount)
+}
+
 @Composable
 private fun ModuleHome(model: ModuleSettingsUiModel, listState: LazyListState, onAction: (ModuleSettingsAction) -> Unit) {
     val haptics = LocalHapticFeedback.current
+    // Audit decision: a known-size list (the installed sources) pages in 1,2,3 form instead of
+    // growing into an endless scroll. Drag reordering only makes sense while every row is visible,
+    // so it is disabled on a paged list (the accessible move actions still work).
+    val paged = model.paged()
+    var page by remember(model.tab) { mutableIntStateOf(0) }
+    val pageCount = if (paged) (model.rows.size + MODULE_PAGE_SIZE - 1) / MODULE_PAGE_SIZE else 1
+    val currentPage = page.coerceIn(0, pageCount - 1)
+    val visibleRows = if (paged) model.rows.drop(currentPage * MODULE_PAGE_SIZE).take(MODULE_PAGE_SIZE) else model.rows
     val reorder = rememberReorderableLazyListState(listState) { from, to ->
         val fromId = from.key as? String
         val toId = to.key as? String
@@ -248,7 +273,7 @@ private fun ModuleHome(model: ModuleSettingsUiModel, listState: LazyListState, o
                 ModuleMessage(model, onAction, moduleItemMotion())
             }
             if (model.tab == 0) {
-                if (model.rows.size > 1) item(key = "order_hint", contentType = "hint") {
+                if (model.rows.size > 1 && !paged) item(key = "order_hint", contentType = "hint") {
                     Row(moduleItemMotion().fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(painterResource(R.drawable.drag_handle), contentDescription = null, modifier = Modifier.size(18.dp),
@@ -261,7 +286,7 @@ private fun ModuleHome(model: ModuleSettingsUiModel, listState: LazyListState, o
                     ModuleEmpty(R.drawable.extension, MaterialShapes.Cookie12Sided, R.string.modules_empty, R.string.modules_empty_description,
                         R.string.modules_import_file, onAction, ModuleSettingsAction.File, moduleItemMotion())
                 }
-                items(model.rows, key = { it.id }, contentType = { "module" }) { row ->
+                items(visibleRows, key = { it.id }, contentType = { "module" }) { row ->
                     ReorderableItem(reorder, key = row.id, animateItemModifier = moduleItemMotion()) { dragging ->
                         val moveUp = remember(row.id, onAction) { { onAction(ModuleSettingsAction.Move(row.id, -1)); true } }
                         val moveDown = remember(row.id, onAction) { { onAction(ModuleSettingsAction.Move(row.id, 1)); true } }
@@ -274,6 +299,7 @@ private fun ModuleHome(model: ModuleSettingsUiModel, listState: LazyListState, o
                             }
                         }
                         ModuleCard(row, model, dragging, onAction, modifier = accessibility) {
+                            if (paged) return@ModuleCard
                             Box(
                                 Modifier.size(48.dp).draggableHandle(
                                     enabled = model.busy == null,
@@ -284,6 +310,9 @@ private fun ModuleHome(model: ModuleSettingsUiModel, listState: LazyListState, o
                             ) { Icon(painterResource(R.drawable.drag_handle), stringResource(R.string.modules_move, row.name)) }
                         }
                     }
+                }
+                if (paged) item(key = "pager", contentType = "pager") {
+                    ModulePager(page = currentPage, pageCount = pageCount, onSelect = { page = it }, modifier = moduleItemMotion())
                 }
             } else {
                 if (model.catalogs.isEmpty()) item(key = "catalogs_empty", contentType = "empty") {
@@ -297,6 +326,37 @@ private fun ModuleHome(model: ModuleSettingsUiModel, listState: LazyListState, o
         }
         ModuleAddMenu(visible = model.busy == null && fabVisible, onAction = onAction,
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp))
+    }
+}
+
+/** Numbered pager: prev/next plus a window of at most [MODULE_PAGE_BUTTONS] page numbers. */
+@Composable
+private fun ModulePager(page: Int, pageCount: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val pages = modulePageWindow(page, pageCount)
+    Row(
+        modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = { onSelect(page - 1) }, enabled = page > 0) {
+            Icon(painterResource(R.drawable.arrow_back), stringResource(R.string.modules_page_previous), modifier = Modifier.size(20.dp))
+        }
+        pages.forEach { index ->
+            val selected = index == page
+            FilledTonalButton(
+                onClick = { onSelect(index) },
+                modifier = Modifier.padding(horizontal = 2.dp).heightIn(min = 40.dp).widthIn(min = 40.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                colors = if (selected) {
+                    ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
+                } else {
+                    ButtonDefaults.filledTonalButtonColors()
+                },
+            ) { Text("${index + 1}", style = MaterialTheme.typography.labelLarge) }
+        }
+        IconButton(onClick = { onSelect(page + 1) }, enabled = page < pageCount - 1) {
+            Icon(painterResource(R.drawable.arrow_forward), stringResource(R.string.modules_page_next), modifier = Modifier.size(20.dp))
+        }
     }
 }
 
