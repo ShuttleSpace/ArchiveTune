@@ -37,7 +37,19 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".MainActivity" tools:node="remove" />
+        <!-- Fork: the car build used to ship the media service only, so the source
+             browser was unreachable on a head unit. Keep the app UI and give it a
+             launcher entry so the car launcher can start it. -->
+        <activity
+            android:name=".MainActivity"
+            android:screenOrientation="userLandscape"
+            tools:node="merge">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
         <activity android:name=".DebugActivity" tools:node="remove" />
         <activity android:name=".RestoreBackupFileActivity" tools:node="remove" />
         <activity android:name=".discord.DiscordOAuthCallbackActivity" tools:node="remove" />
