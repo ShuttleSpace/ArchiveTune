@@ -2726,9 +2726,11 @@ class MediaLibrarySessionCallback
             val modules = runCatching { moduleRepository.snapshot().modules }.getOrDefault(emptyList())
                 .filter { it.enabled }
             val items = mutableListOf<MediaItem>()
+            val start = System.currentTimeMillis()
             for (module in modules) {
-                if (items.size >= limit) break
-                val tracks = withTimeoutOrNull(4_000) {
+                // Worst case is every provider timing out; a driver should not wait for that.
+                if (items.size >= limit || System.currentTimeMillis() - start > 6_000) break
+                val tracks = withTimeoutOrNull(3_000) {
                     runCatching {
                         moduleRepository.runtime.search(
                             "${module.id}:${module.revision}",
