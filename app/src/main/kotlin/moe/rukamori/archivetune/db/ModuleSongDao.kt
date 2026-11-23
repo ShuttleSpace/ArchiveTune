@@ -20,6 +20,9 @@ interface ModuleSongDao {
     @Upsert
     suspend fun upsert(song: SongEntity)
 
+    @Query("SELECT * FROM song WHERE id = :id LIMIT 1")
+    suspend fun songById(id: String): SongEntity?
+
     @Query("SELECT COUNT(*) FROM playlist_song_map WHERE playlistId = :playlistId AND songId = :songId")
     suspend fun songInPlaylist(playlistId: String, songId: String): Int
 

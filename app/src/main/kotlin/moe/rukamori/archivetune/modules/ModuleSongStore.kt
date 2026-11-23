@@ -70,7 +70,29 @@ class ModuleSongStore
          * runs when ExoPlayer actually prepares it, so a 200-track playlist costs one resolve per
          * track instead of twenty up front — and long-lived stream URLs cannot rot in the queue.
          */
-        suspend fun selection(mediaId: String): ModuleAudioSelection? {
+        /**
+     * Like, playlist-add and history all read the `song` table, but a track can reach the player
+     * without ever being stored (voice search, the browse tree, a resumed queue). Writing the row
+     * from the MediaItem tag keeps those actions working for tracks the user has only played.
+     */
+    suspend fun ensureRow(item: androidx.media3.common.MediaItem) {
+        val id = item.mediaId
+        if (!isModuleSong(id)) return
+        if (database.moduleSongDao.songById(id) != null) return
+        val tag = item.localConfiguration?.tag as? moe.rukamori.archivetune.models.MediaMetadata
+        database.moduleSongDao.upsert(
+            SongEntity(
+                id = id,
+                title = tag?.title ?: id,
+                duration = tag?.duration ?: -1,
+                thumbnailUrl = tag?.thumbnailUrl,
+                albumName = tag?.album?.title,
+                albumArtist = tag?.artists?.firstOrNull()?.name,
+            ),
+        )
+    }
+
+    suspend fun selection(mediaId: String): ModuleAudioSelection? {
             val (moduleId, trackId) = parse(mediaId) ?: return null
             val module =
                 repository

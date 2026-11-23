@@ -164,7 +164,11 @@ private class CustomSourceMediaSource(
         scope = owner
         owner.launch {
             try {
-                val selection = withContext(Dispatchers.IO) { store.selection(item.mediaId) }
+                val selection =
+                    withContext(Dispatchers.IO) {
+                        runCatching { store.ensureRow(item) }
+                        store.selection(item.mediaId)
+                    }
                 android.util.Log.d(
                     "LTSource",
                     "resolve ${item.mediaId} -> ${selection?.stream?.mimeType} ${selection?.stream?.url?.take(48)}",
