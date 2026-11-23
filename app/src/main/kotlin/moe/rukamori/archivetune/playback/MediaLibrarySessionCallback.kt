@@ -813,11 +813,27 @@ class MediaLibrarySessionCallback
                         }
 
                         MusicService.RECENT -> {
-                            database
-                                .recentSongs(AUTO_BROWSE_LIMIT)
-                                .first()
-                                .availableForCar(localSongsAllowed, onlineContentAllowed)
-                                .map { it.toCarMediaItem(parentId) }
+                            // Custom-source plays live in their own table; only rows that carry an
+                            // `lt:` id are playable (older rows stored the stream URL).
+                            database.modulePlayDao
+                                .recentOnce(AUTO_BROWSE_LIMIT)
+                                .filter { moe.rukamori.archivetune.modules.ModuleSongStore.isModuleSong(it.mediaId) }
+                                .map { play ->
+                                    moe.rukamori.archivetune.modules.ModuleSongStore.lazyItem(
+                                        moe.rukamori.archivetune.db.entities.SongEntity(
+                                            id = play.mediaId,
+                                            title = play.title,
+                                            duration = play.durationSeconds ?: -1,
+                                            thumbnailUrl = play.thumbnailUrl,
+                                            albumName = play.album,
+                                        ),
+                                    )
+                                } +
+                                database
+                                    .recentSongs(AUTO_BROWSE_LIMIT)
+                                    .first()
+                                    .availableForCar(localSongsAllowed, onlineContentAllowed)
+                                    .map { it.toCarMediaItem(parentId) }
                         }
 
                         MusicService.LIKED -> {

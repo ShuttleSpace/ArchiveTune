@@ -333,7 +333,7 @@ class SourceWorkbenchViewModel
                         }
                     val elapsed = System.currentTimeMillis() - started
                     _state.update { it.copy(stream = stream, playingTitle = hit.track.title, playingTrack = hit.track) }
-                    recordPlay(module, hit.track, stream.upstreamId ?: stream.url)
+                    recordPlay(module, hit.track)
                     trace("stream ${hit.track.title} -> ${stream.mimeType} / ${elapsed}ms\n${stream.url}")
                 } catch (error: CancellationException) {
                     throw error
@@ -349,12 +349,13 @@ class SourceWorkbenchViewModel
         private suspend fun recordPlay(
             module: InstalledModule,
             track: ModuleTrack,
-            mediaId: String,
         ) {
             runCatching {
                 database.modulePlayDao.record(
                     ModulePlayEntity(
-                        mediaId = mediaId,
+                        // Store the resolvable `lt:` id, not the upstream id/URL: history entries must
+                        // stay playable after the stream URL has expired.
+                        mediaId = moe.rukamori.archivetune.modules.ModuleSongStore.songId(module.id, track.id),
                         title = track.title,
                         artists = track.artists.joinToString(", "),
                         album = track.album,

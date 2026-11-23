@@ -13,4 +13,7 @@ interface ModulePlayDao {
 
     @Query("SELECT * FROM module_play ORDER BY playedAt DESC LIMIT :limit")
     fun recent(limit: Int = 50): Flow<List<ModulePlayEntity>>
+
+    @Query("SELECT * FROM module_play ORDER BY playedAt DESC LIMIT :limit")
+    suspend fun recentOnce(limit: Int = 50): List<ModulePlayEntity>
 }
