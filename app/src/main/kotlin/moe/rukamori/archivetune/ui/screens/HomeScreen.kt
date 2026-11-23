@@ -199,7 +199,8 @@ fun HomeScreen(
             HomeScreenState.Empty -> {
                 HomeStatePane(
                     iconResId = R.drawable.music_note,
-                    messageResId = R.string.no_results_found,
+                    messageResId = null,
+                    messageOverride = stringResource(R.string.home_empty_sources_message),
                     actionResId = R.string.retry,
                     onAction = { viewModel.onAction(HomeAction.Refresh) },
                     onOpenSources = { navController.navigate("settings/modules/workbench") },

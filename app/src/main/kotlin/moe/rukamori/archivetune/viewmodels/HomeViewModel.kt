@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withTimeoutOrNull
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.aicontentfilter.FilterAiContentUseCase
 import moe.rukamori.archivetune.aicontentfilter.LoadAiContentFilterPolicyUseCase
@@ -220,6 +221,10 @@ class HomeViewModel
         private val loadError = MutableStateFlow<Int?>(null)
         private val isLoadingMore = MutableStateFlow(false)
         private val homeLoadMutex = Mutex()
+
+        private companion object {
+            const val HOME_REMOTE_TIMEOUT_MS = 8_000L
+        }
 
         private val quickPicksMode =
             context.dataStore.data
@@ -633,6 +638,11 @@ class HomeViewModel
 
             try {
                 val aiContentFilterPolicy = loadAiContentFilterPolicy()
+                // Without a YouTube account the remote home can only hang or fail; every section this
+                // build can actually fill is local, so skip the call instead of spinning for 20 s.
+                val signedIn = context.dataStore.data.first().let { hasYouTubeLoginCookie(it[InnerTubeCookieKey]) }
+                // Any remote section can hang on a cold network; a spinner must not outlive it.
+                withTimeoutOrNull(HOME_REMOTE_TIMEOUT_MS) {
                 supervisorScope {
                     val hideExplicit = context.dataStore.get(HideExplicitKey, false)
                     val hideVideo = context.dataStore.get(HideVideoKey, false)
@@ -640,7 +650,8 @@ class HomeViewModel
                     val fromTimeStamp = System.currentTimeMillis() - 86400000 * 7 * 2
 
                     launch { loadSpeedDialItems() }
-                    val personalizedQuickPicks = async { loadPersonalizedQuickPicks() }
+                    // Related-song seeds come from YouTube; without an account that call never returns.
+                val personalizedQuickPicks = async { if (signedIn) loadPersonalizedQuickPicks() else false }
                     launch {
                         forgottenFavorites.value =
                             database
@@ -679,6 +690,7 @@ class HomeViewModel
                         keepListening.value = (keepListeningSongs + keepListeningAlbums + keepListeningArtists).shuffled()
                     }
 
+                    if (signedIn) {
                     launch {
                         val page =
                             YouTube.home().getOrElse { throwable ->
@@ -717,6 +729,8 @@ class HomeViewModel
                             replaceCommunitySection = true,
                         )
                     }
+                    }
+                }
                 }
 
                 updateAllLocalItems()
