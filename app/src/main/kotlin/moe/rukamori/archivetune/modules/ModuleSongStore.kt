@@ -51,18 +51,44 @@ class ModuleSongStore
 
         suspend fun stream(songId: String): ModuleStream? {
             val (moduleId, trackId) = parse(songId) ?: return null
-            val module =
-                repository
-                    .snapshot()
-                    .modules
-                    .firstOrNull { it.id == moduleId && it.enabled } ?: return null
-            return repository.runtime.stream(
-                "${module.id}:${module.revision}",
-                module.source,
-                module.origin,
-                trackId,
-                module.configuration,
-            )
+            val modules = repository.snapshot().modules
+            val module = modules.firstOrNull { it.id == moduleId && it.enabled } ?: return null
+            val primary =
+                runCatching {
+                    repository.runtime.stream(
+                        "${module.id}:${module.revision}",
+                        module.source,
+                        module.origin,
+                        trackId,
+                        module.configuration,
+                    )
+                }.getOrNull()
+            if (primary != null) return primary
+            return supplementStream(modules, module, trackId)
+        }
+
+        /**
+         * A source can be fine at searching and still have no stream for one track (copyright, VIP).
+         * `lt-fleet-lx` aggregates the LX endpoint pools, which only ever resolve a url for a
+         * known track, so it is asked as a fallback with the `<源>:<id>` id they expect.
+         */
+        private suspend fun supplementStream(
+            modules: List<InstalledModule>,
+            owner: InstalledModule,
+            trackId: String,
+        ): ModuleStream? {
+            val lxSource = LX_SOURCES[owner.id] ?: owner.manifest.id.takeIf { LX_SOURCES.containsValue(it) }
+            if (lxSource == null) return null
+            val supplement = modules.firstOrNull { it.enabled && STREAM_ONLY_LABEL in it.manifest.labels } ?: return null
+            return runCatching {
+                repository.runtime.stream(
+                    "${supplement.id}:${supplement.revision}",
+                    supplement.source,
+                    supplement.origin,
+                    "$lxSource:$trackId",
+                    supplement.configuration,
+                )
+            }.getOrNull()
         }
 
         /**
@@ -123,6 +149,18 @@ class ModuleSongStore
 
             /** URI scheme that routes a queue item back into [selection]. */
             const val SCHEME = "lt"
+
+        /** Label that marks a module as stream-only; the search UI hides these. */
+        const val STREAM_ONLY_LABEL = "stream-only"
+
+        /** Our source ids to the LX source codes their endpoints understand. */
+        private val LX_SOURCES =
+            mapOf(
+                "kuwo" to "kw",
+                "netease" to "wy",
+                "kugou" to "kg",
+                "qq" to "tx",
+            )
 
             fun songId(
                 moduleId: String,

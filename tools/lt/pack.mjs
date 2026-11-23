@@ -75,7 +75,7 @@ function pack(distDir, outDir, id) {
       homepage: sourceManifest.homepage ?? '',
       type: ['audio_provider'],
       capabilities: ['searchTracks', 'getTrackStreamUrl'],
-      labels: [],
+      labels: id === 'lt-fleet-lx' ? ['stream-only'] : [],
     },
   };
 

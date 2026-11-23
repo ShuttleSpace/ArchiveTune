@@ -97,7 +97,14 @@ class SourceWorkbenchViewModel
                 // whenever it is the first module screen opened after a launch.
                 runCatching { repository.snapshot() }
                 repository.state.collect { registry ->
-                    val modules = registry?.modules?.filter(InstalledModule::enabled).orEmpty()
+                    // Stream-only modules (lt-fleet-lx) resolve urls for known tracks but cannot
+                    // search; showing them would only ever produce an empty tab.
+                    val modules =
+                        registry
+                            ?.modules
+                            ?.filter(InstalledModule::enabled)
+                            ?.filterNot { ModuleSongStore.STREAM_ONLY_LABEL in it.manifest.labels }
+                            .orEmpty()
                     _state.update { current ->
                         current.copy(
                             modules = modules,
