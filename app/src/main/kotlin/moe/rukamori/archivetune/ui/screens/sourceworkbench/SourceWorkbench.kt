@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -79,6 +80,7 @@ import androidx.navigation.NavController
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.ui.component.CarMode
 import moe.rukamori.archivetune.ui.component.SourcePickerRow
 import moe.rukamori.archivetune.ui.component.SourcePickerSheet
 import moe.rukamori.archivetune.ui.component.SourceTabRow
@@ -281,7 +283,9 @@ fun SourceWorkbenchScreen(
                 contentPadding = PaddingValues(bottom = MINI_PLAYER_INSET + 16.dp),
             ) {
                 items(grouped[activeSource].orEmpty(), key = { "${it.moduleId}:${it.track.id}" }) { hit ->
+                    val carMode = CarMode.enabled
                     ListItem(
+                        modifier = if (carMode) Modifier.heightIn(min = 64.dp) else Modifier,
                         headlineContent = {
                             Text(hit.track.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         },
@@ -294,21 +298,24 @@ fun SourceWorkbenchScreen(
                                     duration,
                                     hit.track.album,
                                 ).joinToString(" · "),
-                                maxLines = 2,
+                                // A car screen is 600dp tall; one line per row keeps six rows visible.
+                                maxLines = if (carMode) 1 else 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         },
                         trailingContent = {
+                            val touch = if (carMode) Modifier.heightIn(min = 48.dp) else Modifier
                             if (playlistId == null) {
-                                TextButton(onClick = { viewModel.play(hit) }) { Text(stringResource(R.string.source_workbench_preview)) }
+                                TextButton(modifier = touch, onClick = { viewModel.play(hit) }) { Text(stringResource(R.string.source_workbench_preview)) }
                             } else {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     // Preview first: nothing else tells you whether a source can
                                     // actually play this track before it lands in the playlist.
-                                    TextButton(onClick = { viewModel.play(hit) }) {
+                                    TextButton(modifier = touch, onClick = { viewModel.play(hit) }) {
                                         Text(stringResource(R.string.source_workbench_preview))
                                     }
                                     TextButton(
+                                        modifier = touch,
                                         onClick = {
                                             scope.launch { viewModel.addToPlaylist(playlistId, hit) }
                                         },
@@ -352,7 +359,9 @@ fun SourceWorkbenchScreen(
             LaunchedEffect(Unit) {
                 dockEnabled = debugContext.dataStore.get(ShowSourceDebugDockKey, true)
             }
-            if (dockEnabled) {
+            // The dock is a developer surface; on a 600dp-tall car screen it would sit on
+            // top of the results, so the car build leaves it off.
+            if (dockEnabled && !CarMode.enabled) {
                 SourceDebugDock(
                     state = state,
                     onClear = viewModel::clearTrace,
