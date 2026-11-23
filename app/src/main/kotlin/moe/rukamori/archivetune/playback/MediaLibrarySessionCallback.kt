@@ -776,7 +776,7 @@ class MediaLibrarySessionCallback
                                 .shuffled()
                                 .take(AUTO_BROWSE_LIMIT)
                                 .availableForCar(localSongsAllowed, onlineContentAllowed)
-                                .map { it.toMediaItem(parentId) }
+                                .map { it.toCarMediaItem(parentId) }
                         }
 
                         MusicService.HOME_FORGOTTEN_FAVORITES -> {
@@ -786,13 +786,13 @@ class MediaLibrarySessionCallback
                                 .shuffled()
                                 .take(AUTO_BROWSE_LIMIT)
                                 .availableForCar(localSongsAllowed, onlineContentAllowed)
-                                .map { it.toMediaItem(parentId) }
+                                .map { it.toCarMediaItem(parentId) }
                         }
 
                         MusicService.HOME_KEEP_LISTENING -> {
                             homeKeepListeningSongs()
                                 .availableForCar(localSongsAllowed, onlineContentAllowed)
-                                .map { it.toMediaItem(parentId) }
+                                .map { it.toCarMediaItem(parentId) }
                         }
 
                         MusicService.HOME_SUGGESTED_SONGS -> {
@@ -809,7 +809,7 @@ class MediaLibrarySessionCallback
                                 .quickPicks()
                                 .first()
                                 .availableForCar(localSongsAllowed, onlineContentAllowed)
-                                .map { it.toMediaItem(parentId) }
+                                .map { it.toCarMediaItem(parentId) }
                         }
 
                         MusicService.RECENT -> {
@@ -817,7 +817,7 @@ class MediaLibrarySessionCallback
                                 .recentSongs(AUTO_BROWSE_LIMIT)
                                 .first()
                                 .availableForCar(localSongsAllowed, onlineContentAllowed)
-                                .map { it.toMediaItem(parentId) }
+                                .map { it.toCarMediaItem(parentId) }
                         }
 
                         MusicService.LIKED -> {
@@ -827,13 +827,13 @@ class MediaLibrarySessionCallback
                                     descending = true,
                                 ).first()
                                 .availableForCar(localSongsAllowed, onlineContentAllowed)
-                                .map { it.toMediaItem(parentId) }
+                                .map { it.toCarMediaItem(parentId) }
                         }
 
                         MusicService.DOWNLOADED -> {
                             downloadedSongs()
                                 .first()
-                                .map { it.toMediaItem(parentId) }
+                                .map { it.toCarMediaItem(parentId) }
                         }
 
                         MusicService.SONG -> {
@@ -841,7 +841,7 @@ class MediaLibrarySessionCallback
                                 .songsByCreateDateAsc()
                                 .first()
                                 .availableForCar(localSongsAllowed, onlineContentAllowed)
-                                .map { it.toMediaItem(parentId) }
+                                .map { it.toCarMediaItem(parentId) }
                         }
 
                         MusicService.ARTIST -> {
@@ -949,7 +949,7 @@ class MediaLibrarySessionCallback
                                         .first()
                                         .availableForCar(localSongsAllowed, onlineContentAllowed)
                                         .map {
-                                            it.toMediaItem(parentId)
+                                            it.toCarMediaItem(parentId)
                                         }
                                 }
 
@@ -959,7 +959,7 @@ class MediaLibrarySessionCallback
                                         .first()
                                         .availableForCar(localSongsAllowed, onlineContentAllowed)
                                         .map {
-                                            it.toMediaItem(parentId)
+                                            it.toCarMediaItem(parentId)
                                         }
                                 }
 
@@ -1692,7 +1692,7 @@ class MediaLibrarySessionCallback
                         }
                     actionItems + playlistSongs(playlistId)
                         .availableForCar(localSongsAllowed, onlineContentAllowed)
-                        .map { it.toMediaItem(parentId) }
+                        .map { it.toCarMediaItem(parentId) }
                 }
 
                 PLAYLIST_ACTION_SORT -> {
@@ -1712,7 +1712,7 @@ class MediaLibrarySessionCallback
                                 ?: return emptyList()
                         playlistSongs(playlistId, sortOption)
                             .availableForCar(localSongsAllowed, onlineContentAllowed)
-                            .map { it.toMediaItem(parentId) }
+                            .map { it.toCarMediaItem(parentId) }
                     }
                 }
 
@@ -1720,7 +1720,7 @@ class MediaLibrarySessionCallback
                     playlistSongs(playlistId)
                         .availableForCar(localSongsAllowed, onlineContentAllowed)
                         .shuffled()
-                        .map { it.toMediaItem(parentId) }
+                        .map { it.toCarMediaItem(parentId) }
                 }
 
                 else -> {
@@ -2495,6 +2495,17 @@ class MediaLibrarySessionCallback
                 .build()
         }
 
+        /**
+         * Custom-source songs must become lazy `lt:` items so the audio is resolved on prepare;
+         * [Song.toMediaItem] would emit a YouTube-shaped id the playback layer cannot resolve.
+         */
+        private fun Song.toCarMediaItem(parentId: String): MediaItem =
+            if (moe.rukamori.archivetune.modules.ModuleSongStore.isModuleSong(song.id)) {
+                moe.rukamori.archivetune.modules.ModuleSongStore.lazyItem(song)
+            } else {
+                toMediaItem(parentId)
+            }
+
         private fun List<Song>.availableForCar(
             localSongsAllowed: Boolean,
             onlineContentAllowed: Boolean,
@@ -2503,6 +2514,7 @@ class MediaLibrarySessionCallback
             return filter { song ->
                 when {
                     song.id.isLocalMediaId() -> localSongsAllowed
+                    moe.rukamori.archivetune.modules.ModuleSongStore.isModuleSong(song.id) -> onlineContentAllowed
                     onlineContentAllowed -> true
                     else -> song.id in cachedIds
                 }
