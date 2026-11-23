@@ -42,6 +42,9 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.guava.future
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import moe.rukamori.archivetune.modules.ModuleRepository
+import moe.rukamori.archivetune.modules.ModuleSongStore
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.withContext
 import moe.rukamori.archivetune.R
@@ -97,6 +100,7 @@ class MediaLibrarySessionCallback
         val downloadUtil: DownloadUtil,
         private val androidAutoSettings: AndroidAutoSettingsUseCases,
         private val spotifyLibraryRepository: SpotifyLibraryRepository,
+        private val moduleRepository: ModuleRepository,
     ) : MediaLibrarySession.Callback {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         private val onlineSearchItemCache = ConcurrentHashMap<String, MediaItem>()
@@ -1378,7 +1382,8 @@ class MediaLibrarySessionCallback
                         val onlineSongs = searchOnlineSongs(voiceQuery, previewSize = 50).filter { onlineItem ->
                             existingSongIds.add(searchSongIdentity(onlineItem))
                         }
-                        interleaveMediaItems(offlineSongs.items, onlineSongs)
+                        searchModuleSongs(voiceQuery, MODULE_VOICE_LIMIT) +
+                            interleaveMediaItems(offlineSongs.items, onlineSongs)
                     }
                     if (searchQueue.isNotEmpty()) {
                         return@future MediaSession.MediaItemsWithStartPosition(
@@ -2674,6 +2679,8 @@ class MediaLibrarySessionCallback
             return merged
         }
 
+        private val MODULE_VOICE_LIMIT = 8
+
         internal suspend fun resolveVoiceMediaItems(
             query: String,
             previewSize: Int = 50,
@@ -2693,6 +2700,7 @@ class MediaLibrarySessionCallback
                     .take(previewSize)
                     .map { it.toMediaItem(MusicService.QUICK_PICKS) }
             }
+            val moduleSongs = searchModuleSongs(q, MODULE_VOICE_LIMIT)
             val offlineSongs = searchOfflineSongs(q, previewSize, configuration)
             val existingIds = offlineSongs.items.mapTo(HashSet(offlineSongs.items.size * 2), ::searchSongIdentity)
             val onlineSongs =
@@ -2705,7 +2713,40 @@ class MediaLibrarySessionCallback
                     existingIds.add(searchSongIdentity(onlineItem))
                 }
             onlineSongs.forEach { onlineSearchItemCache[it.mediaId] = it }
-            return interleaveMediaItems(offlineSongs.items, onlineSongs).take(previewSize)
+            return (moduleSongs + interleaveMediaItems(offlineSongs.items, onlineSongs)).take(previewSize)
+        }
+
+        /**
+         * Custom sources have no catalogue to browse, so a voice request is the only way to reach
+         * them from a car. Searched sequentially and capped, because each provider call boots a JS
+         * engine and the driver is waiting on the answer.
+         */
+        private suspend fun searchModuleSongs(query: String, limit: Int): List<MediaItem> {
+            if (query.isBlank() || limit <= 0) return emptyList()
+            val modules = runCatching { moduleRepository.snapshot().modules }.getOrDefault(emptyList())
+                .filter { it.enabled }
+            val items = mutableListOf<MediaItem>()
+            for (module in modules) {
+                if (items.size >= limit) break
+                val tracks = withTimeoutOrNull(4_000) {
+                    runCatching {
+                        moduleRepository.runtime.search(
+                            "${module.id}:${module.revision}",
+                            module.source,
+                            module.origin,
+                            query,
+                            module.configuration,
+                            pageSize = limit,
+                        )
+                    }.getOrDefault(emptyList())
+                }.orEmpty()
+                tracks.forEach { track ->
+                    if (items.size < limit) {
+                        items += ModuleSongStore.lazyItem(ModuleSongStore.songOf(module, track).song)
+                    }
+                }
+            }
+            return items
         }
 
         private fun searchSongIdentity(item: MediaItem): String = item.mediaId.removePrefix("${MusicService.SONG}/")
