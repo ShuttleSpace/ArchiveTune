@@ -442,6 +442,10 @@ class MediaLibrarySessionCallback
         ): List<MediaItem> {
             val items = ArrayList<MediaItem>(min(requested, 200))
 
+            // Custom sources first: this build cannot play YouTube results, so a car search that
+            // listed them first would look connected but answer "cannot play".
+            items += searchModuleSongs(query, MODULE_VOICE_LIMIT)
+
             val offlineSongs = searchOfflineSongs(query, previewSize = requested, configuration = configuration)
             val existingSongIds =
                 offlineSongs.items
