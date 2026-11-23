@@ -429,7 +429,14 @@ class MediaLibrarySessionCallback
                         )
                         .map { it.toMediaItem(MusicService.RECENT) }
                 } else {
-                    searchItems(query, CAR_SEARCH_RESULT_LIMIT, configuration)
+                    // A head unit can only act on what this build can actually play, so its search
+                    // leaves YouTube out entirely instead of listing items that answer "cannot play".
+                    searchItems(
+                        query,
+                        CAR_SEARCH_RESULT_LIMIT,
+                        configuration,
+                        includeRemote = false,
+                    )
                 }
             val artworkAllowed = androidAutoSettings.isRemoteArtworkAllowed(configuration)
             return items.take(AUTO_BROWSE_LIMIT).map { it.withCarArtworkPolicy(artworkAllowed) }
@@ -439,6 +446,7 @@ class MediaLibrarySessionCallback
             query: String,
             requested: Int,
             configuration: AndroidAutoConfiguration?,
+            includeRemote: Boolean = true,
         ): List<MediaItem> {
             val items = ArrayList<MediaItem>(min(requested, 200))
 
@@ -451,13 +459,17 @@ class MediaLibrarySessionCallback
                 offlineSongs.items
                     .mapTo(HashSet(offlineSongs.items.size * 2), ::searchSongIdentity)
             val onlineSongs =
-                searchOnlineSongs(
-                    query,
-                    previewSize = requested,
-                    allowed = configuration == null ||
-                        (configuration.onlineVoiceSearch && androidAutoSettings.isOnlinePlaybackAllowed(configuration)),
-                ).filter { onlineItem ->
-                    existingSongIds.add(searchSongIdentity(onlineItem))
+                if (includeRemote) {
+                    searchOnlineSongs(
+                        query,
+                        previewSize = requested,
+                        allowed = configuration == null ||
+                            (configuration.onlineVoiceSearch && androidAutoSettings.isOnlinePlaybackAllowed(configuration)),
+                    ).filter { onlineItem ->
+                        existingSongIds.add(searchSongIdentity(onlineItem))
+                    }
+                } else {
+                    emptyList()
                 }
             onlineSongs.forEach { onlineSearchItemCache[it.mediaId] = it }
             items +=
