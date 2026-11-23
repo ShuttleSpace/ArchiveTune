@@ -1467,7 +1467,7 @@ class MediaLibrarySessionCallback
                         val allSongs = database.songsByCreateDateAsc().first()
                             .let { if (isCarController) it.availableForCar(localSongsAllowed, onlineContentAllowed) else it }
                         MediaSession.MediaItemsWithStartPosition(
-                            allSongs.map { it.toMediaItem() },
+                            allSongs.map { it.toCarMediaItem(MusicService.SONG) },
                             allSongs.indexOfFirst { it.id == songId }.takeIf { it != -1 } ?: 0,
                             startPositionMs,
                         )
@@ -2556,8 +2556,9 @@ class MediaLibrarySessionCallback
         private fun List<Song>.toMediaItemsWithStartPosition(
             selectedSongId: String?,
             startPositionMs: Long,
+            parentId: String? = null,
         ) = MediaSession.MediaItemsWithStartPosition(
-            map { it.toMediaItem() },
+            if (parentId == null) map { it.toMediaItem() } else map { it.toCarMediaItem(parentId) },
             selectedSongId?.let { id ->
                 indexOfFirst { it.id == id }.takeIf { it != -1 }
             } ?: 0,
