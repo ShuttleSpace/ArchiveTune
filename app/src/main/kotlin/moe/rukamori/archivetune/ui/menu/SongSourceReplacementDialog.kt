@@ -358,6 +358,9 @@ fun SongSourceReplacementDialog(
                             },
                         selectedIndex = activeSourceIndex,
                         onSelect = { sourceTab = it },
+                        onDoubleTap = { index ->
+                            sourceOrder.getOrNull(index)?.let { moduleId -> workbenchViewModel.refresh(moduleId) }
+                        },
                     )
                     LazyColumn(
                         modifier =

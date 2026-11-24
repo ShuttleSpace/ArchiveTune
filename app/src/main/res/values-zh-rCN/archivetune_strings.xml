@@ -1124,4 +1124,6 @@
     <string name="source_workbench_invert_sources">反选</string>
     <string name="source_workbench_clear_sources">清空</string>
     <string name="source_workbench_done">完成</string>
+    <string name="source_workbench_download">下载</string>
+    <string name="source_workbench_download_queued">已加入下载队列：%1$s</string>
 </resources>

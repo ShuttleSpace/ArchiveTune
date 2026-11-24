@@ -91,6 +91,7 @@ class DownloadUtil
         private val moduleAudio: moe.rukamori.archivetune.modules.ResolveModuleAudioUseCase,
         private val moduleBindings: moe.rukamori.archivetune.modules.ModuleDownloadRepository,
         private val moduleStorage: moe.rukamori.archivetune.modules.ModuleMediaStorage,
+        private val moduleSongs: moe.rukamori.archivetune.modules.ModuleSongStore,
     ) {
         private val audioQuality by enumPreference(context, AudioQualityKey, AudioQuality.AUTO)
         private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -208,6 +209,10 @@ class DownloadUtil
                 context,
                 DefaultDownloadIndex(databaseProvider),
                 DownloaderFactory { request ->
+                    // `lt:` ids are custom-source tracks: the module layer cannot resolve them.
+                    if (moe.rukamori.archivetune.modules.ModuleSongStore.isModuleSong(request.id)) {
+                        return@DownloaderFactory CustomSourceDownloader(request, moduleSongs, moduleStorage)
+                    }
                     ModuleSelectingDownloader(
                         request,
                         DownloaderFactory { standardRequest -> ResumingDownloader(standardRequest, downloaderFactory, ::resetDownloadContent) },

@@ -26,6 +26,10 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -166,8 +170,12 @@ fun SourceTabRow(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    onDoubleTap: ((Int) -> Unit)? = null,
 ) {
     if (tabs.size < 2) return
+    // Tracking the last tap keeps the double-tap on the existing onClick instead of
+    // wrapping every tab in its own gesture detector, which would swallow the select.
+    var lastTap by remember { mutableStateOf<Pair<Int, Long>?>(null) }
     ScrollableTabRow(
         selectedTabIndex = selectedIndex,
         edgePadding = 8.dp,
@@ -178,7 +186,17 @@ fun SourceTabRow(
         tabs.forEachIndexed { index, (label, count) ->
             Tab(
                 selected = index == selectedIndex,
-                onClick = { onSelect(index) },
+                onClick = {
+                    val now = System.currentTimeMillis()
+                    val previous = lastTap
+                    if (onDoubleTap != null && previous?.first == index && now - (previous.second) < 400) {
+                        lastTap = null
+                        onDoubleTap(index)
+                    } else {
+                        lastTap = index to now
+                        onSelect(index)
+                    }
+                },
                 text = { Text("$label $count", maxLines = 1, overflow = TextOverflow.Ellipsis) },
             )
         }

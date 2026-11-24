@@ -1165,4 +1165,6 @@
     <string name="source_workbench_invert_sources">Invert</string>
     <string name="source_workbench_clear_sources">Clear</string>
     <string name="source_workbench_done">Done</string>
+    <string name="source_workbench_download">Download</string>
+    <string name="source_workbench_download_queued">Added to downloads: %1$s</string>
 </resources>

@@ -279,6 +279,7 @@ fun SourceWorkbenchScreen(
                     tabs = tabSources.map { module -> module.manifest.name to (grouped[module.id]?.size ?: 0) },
                     selectedIndex = activeIndex,
                     onSelect = { tabIndex = it },
+                    onDoubleTap = { tabSources.getOrNull(it)?.let { module -> viewModel.refresh(module.id) } },
                 )
             }
             val activeSource = tabSources.getOrNull(activeIndex)?.id
@@ -311,10 +312,22 @@ fun SourceWorkbenchScreen(
                         },
                         trailingContent = {
                             val touch = if (carMode) Modifier.heightIn(min = 48.dp) else Modifier
+                            val downloadButton = @Composable {
+                                IconButton(modifier = touch, onClick = { viewModel.download(hit) }) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.download),
+                                        contentDescription = stringResource(R.string.source_workbench_download),
+                                    )
+                                }
+                            }
                             if (playlistId == null) {
-                                TextButton(modifier = touch, onClick = { viewModel.play(hit) }) { Text(stringResource(R.string.source_workbench_preview)) }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    downloadButton()
+                                    TextButton(modifier = touch, onClick = { viewModel.play(hit) }) { Text(stringResource(R.string.source_workbench_preview)) }
+                                }
                             } else {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    downloadButton()
                                     // Preview first: nothing else tells you whether a source can
                                     // actually play this track before it lands in the playlist.
                                     TextButton(modifier = touch, onClick = { viewModel.play(hit) }) {

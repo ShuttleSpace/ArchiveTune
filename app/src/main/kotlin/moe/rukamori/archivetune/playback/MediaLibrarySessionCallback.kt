@@ -2422,7 +2422,7 @@ class MediaLibrarySessionCallback
 
         private fun MediaItem.voiceSearchQuery(): String {
             val extras = requestMetadata.extras
-            return listOfNotNull(
+            val parts = listOfNotNull(
                 requestMetadata.searchQuery,
                 extras?.getString(MediaStore.EXTRA_MEDIA_TITLE),
                 extras?.getString(MediaStore.EXTRA_MEDIA_ARTIST),
@@ -2431,7 +2431,12 @@ class MediaLibrarySessionCallback
             ).map(String::trim)
                 .filter(String::isNotBlank)
                 .distinct()
-                .joinToString(" ")
+            if (parts.isNotEmpty()) return parts.joinToString(" ")
+            // Some assistants put the spoken words in the media id instead of a search query.
+            // Real ids are either a browsable path or an lt: custom-source id, so plain text is safe.
+            return mediaId.trim().takeIf {
+                it.isNotBlank() && !it.contains("/") && !it.startsWith("${ModuleSongStore.SCHEME}:")
+            }.orEmpty()
         }
 
         private fun drawableUri(

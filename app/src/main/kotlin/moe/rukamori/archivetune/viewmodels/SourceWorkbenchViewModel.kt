@@ -282,6 +282,83 @@ class SourceWorkbenchViewModel
             }
         }
 
+        /** Queues an offline download; the file keeps whatever format the source serves. */
+        fun download(hit: Hit) {
+            val mediaId = moe.rukamori.archivetune.modules.ModuleSongStore.songId(hit.moduleId, hit.track.id)
+            viewModelScope.launch {
+                val request =
+                    androidx.media3.exoplayer.offline.DownloadRequest
+                        .Builder(mediaId, android.net.Uri.parse("lt:///${android.net.Uri.encode(mediaId)}"))
+                        .setCustomCacheKey(mediaId)
+                        .setData(hit.track.title.toByteArray())
+                        .build()
+                androidx.media3.exoplayer.offline.DownloadService.sendAddDownload(
+                    context,
+                    moe.rukamori.archivetune.playback.ExoDownloadService::class.java,
+                    request,
+                    false,
+                )
+                _state.update {
+                    it.copy(message = context.getString(R.string.source_workbench_download_queued, hit.track.title))
+                }
+            }
+        }
+
+        /** Re-runs page 1 of one source and replaces only that source's rows. */
+        fun refresh(moduleId: String) {
+            val current = _state.value
+            val module = current.modules.firstOrNull { it.id == moduleId } ?: return
+            val query = current.query.trim()
+            if (query.isEmpty() || moduleId in current.loadingMore) return
+            viewModelScope.launch {
+                _state.update { it.copy(loadingMore = it.loadingMore + moduleId, error = null) }
+                val began = System.currentTimeMillis()
+                val result = runCatching { withTimeout(25_000) { search(module, query, page = 1) } }
+                val elapsed = System.currentTimeMillis() - began
+                result
+                    .onSuccess { trace("refresh ${module.manifest.name} \"$query\" -> ${it.size} tracks / ${elapsed}ms") }
+                    .onFailure { trace("refresh ${module.manifest.name} failed: ${describe(it)}") }
+                val fresh = result.getOrNull()?.map { track -> Hit(track, moduleId) }.orEmpty()
+                _state.update { state ->
+                    val stats = state.stats.toMutableMap()
+                    val key = module.manifest.name
+                    val previous = stats[key] ?: SourceStat()
+                    stats[key] =
+                        result.fold(
+                            onSuccess = { list ->
+                                previous.copy(
+                                    queries = previous.queries + 1,
+                                    empty = previous.empty + if (list.isEmpty()) 1 else 0,
+                                    lastMs = elapsed,
+                                    lastError = null,
+                                )
+                            },
+                            onFailure = { failure ->
+                                previous.copy(
+                                    queries = previous.queries + 1,
+                                    failed = previous.failed + 1,
+                                    lastMs = elapsed,
+                                    lastError = describe(failure),
+                                )
+                            },
+                        )
+                    state.copy(
+                        loadingMore = state.loadingMore - moduleId,
+                        hits =
+                            if (result.isSuccess) {
+                                state.hits.filterNot { it.moduleId == moduleId } + fresh
+                            } else {
+                                state.hits
+                            },
+                        moreSources =
+                            if (fresh.isNotEmpty()) state.moreSources + moduleId else state.moreSources - moduleId,
+                        stats = stats,
+                        error = result.exceptionOrNull()?.let { describe(it) } ?: state.error,
+                    )
+                }
+            }
+        }
+
         /** Returns true when the track was newly written into the playlist. */
         suspend fun addToPlaylist(
             playlistId: String,
