@@ -8,6 +8,7 @@
 package moe.rukamori.archivetune.lyrics
 
 import android.content.Context
+import android.util.Log
 import moe.rukamori.archivetune.modules.ModuleRepository
 import moe.rukamori.archivetune.modules.ModuleSongStore
 import javax.inject.Inject
@@ -37,11 +38,20 @@ class ModuleLyricsProvider @Inject constructor(
         album: String?,
         duration: Int,
     ): Result<String> {
-        val parsed = ModuleSongStore.parse(id) ?: return missing("not a custom-source track")
+        val parsed = ModuleSongStore.parse(id)
+        if (parsed == null) {
+            // Most tracks are not ours; log once per play so the debug log page can
+            // prove the provider was asked and had nothing to say.
+            Log.d(TAG, "skip $id (not a custom-source track)")
+            return missing("not a custom-source track")
+        }
         val module = runCatching { repository.snapshot().modules }
             .getOrNull()
             ?.firstOrNull { it.id == parsed.first && it.enabled }
-            ?: return missing("source ${parsed.first} is not installed")
+            ?: run {
+                Log.d(TAG, "skip $id (source ${parsed.first} is not installed or disabled)")
+                return missing("source ${parsed.first} is not installed")
+            }
         val lyrics = runCatching {
             repository.runtime.lyric(
                 id = "${module.id}:${module.revision}",
@@ -54,8 +64,18 @@ class ModuleLyricsProvider @Inject constructor(
                 album = album,
                 durationSeconds = duration,
             )
-        }.getOrNull()
-        return if (lyrics.isNullOrBlank()) missing("source returned no lyric") else Result.success(lyrics)
+        }.onFailure { Log.d(TAG, "fail $id: ${it.javaClass.simpleName}: ${it.message}") }.getOrNull()
+        return if (lyrics.isNullOrBlank()) {
+            Log.d(TAG, "miss $id (${module.manifest.name} returned no lyric for ${parsed.second})")
+            missing("source returned no lyric")
+        } else {
+            Log.d(TAG, "hit $id via ${module.manifest.name}: ${lyrics.length} chars")
+            Result.success(lyrics)
+        }
+    }
+
+    private companion object {
+        const val TAG = "LTLyric"
     }
 
     private fun missing(reason: String): Result<String> = Result.failure(NoSuchElementException(reason))
