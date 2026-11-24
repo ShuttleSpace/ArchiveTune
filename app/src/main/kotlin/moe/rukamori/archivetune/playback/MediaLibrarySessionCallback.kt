@@ -691,7 +691,7 @@ class MediaLibrarySessionCallback
                             // stored, grouped by source name.
                             database.moduleSongDao.moduleSourceNames().map { name ->
                                 browsableMediaItem(
-                                    "${MusicService.SOURCES}/$name",
+                                    MusicService.sourceFolderId(name),
                                     name,
                                     null,
                                     drawableUri(R.drawable.queue_music),
@@ -963,9 +963,9 @@ class MediaLibrarySessionCallback
                                 // catalogue of their own (search is query driven), so the tree exposes
                                 // what we have, grouped by source name. Playback goes through the
                                 // `lt:` scheme resolved by CustomSourceMediaSource.
-                                parentId.startsWith("${MusicService.SOURCES}/") -> {
+                                MusicService.sourceNameOf(parentId) != null -> {
                                     database.moduleSongDao
-                                        .moduleSongsOf(parentId.removePrefix("${MusicService.SOURCES}/"))
+                                        .moduleSongsOf(MusicService.sourceNameOf(parentId).orEmpty())
                                         .map { moe.rukamori.archivetune.modules.ModuleSongStore.lazyItem(it) }
                                 }
 

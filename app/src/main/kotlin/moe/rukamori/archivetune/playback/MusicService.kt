@@ -8972,6 +8972,13 @@ class MusicService :
             isPlaybackInactive: Boolean,
         ): Boolean = (isHostSessionActive && isPlaybackInactive) || stopMusicOnTaskClearEnabled
 
+        /** Media id of one custom source's folder in the browsable tree. */
+        fun sourceFolderId(sourceName: String): String = "$SOURCES/$sourceName"
+
+        /** Inverse of [sourceFolderId]; null when [parentId] is not a source folder. */
+        fun sourceNameOf(parentId: String): String? =
+            if (parentId.startsWith("$SOURCES/")) parentId.removePrefix("$SOURCES/") else null
+
         const val ROOT = "root"
         const val HOME = "home"
         const val LIBRARY = "library"
