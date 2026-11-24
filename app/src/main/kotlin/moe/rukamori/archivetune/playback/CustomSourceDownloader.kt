@@ -10,6 +10,8 @@ package moe.rukamori.archivetune.playback
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.Downloader
 import kotlinx.coroutines.runBlocking
+import moe.rukamori.archivetune.db.MusicDatabase
+import moe.rukamori.archivetune.db.entities.FormatEntity
 import moe.rukamori.archivetune.modules.ModuleMediaStorage
 import moe.rukamori.archivetune.modules.ModuleSongStore
 import java.io.IOException
@@ -25,6 +27,7 @@ internal class CustomSourceDownloader(
     private val request: DownloadRequest,
     private val store: ModuleSongStore,
     private val storage: ModuleMediaStorage,
+    private val database: MusicDatabase,
 ) : Downloader {
     private val lock = Any()
     private var delegate: Downloader? = null
@@ -53,6 +56,29 @@ internal class CustomSourceDownloader(
                 delegate = downloader
             }
             downloader.download(progressListener)
+            // `download` returns only after the file is complete; the downloaded-songs list joins
+            // song with format, so a row here is what makes an lt: track show up as downloaded.
+            runBlocking {
+                runCatching {
+                    val stream = selection.stream
+                    database.upsert(
+                        FormatEntity(
+                            id = request.id,
+                            itag = 0,
+                            mimeType = stream.mimeType.ifBlank { "audio/mpeg" },
+                            codecs = stream.codecs,
+                            bitrate = stream.bitrate,
+                            sampleRate = stream.sampleRate,
+                            contentLength = stream.contentLength,
+                            loudnessDb = null,
+                            playbackUrl = null,
+                            sourceName = selection.module.manifest.name,
+                            sourceId = selection.module.id,
+                            streamVariant = stream.variant,
+                        ),
+                    )
+                }
+            }
         } finally {
             synchronized(lock) {
                 worker = null

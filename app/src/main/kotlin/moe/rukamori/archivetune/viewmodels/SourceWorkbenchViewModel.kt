@@ -286,6 +286,8 @@ class SourceWorkbenchViewModel
         fun download(hit: Hit) {
             val mediaId = moe.rukamori.archivetune.modules.ModuleSongStore.songId(hit.moduleId, hit.track.id)
             viewModelScope.launch {
+                val module = _state.value.modules.firstOrNull { it.id == hit.moduleId }
+                if (module != null) moduleSongs.persistSong(module, hit.track)
                 val request =
                     androidx.media3.exoplayer.offline.DownloadRequest
                         .Builder(mediaId, android.net.Uri.parse("lt:///${android.net.Uri.encode(mediaId)}"))
@@ -296,8 +298,9 @@ class SourceWorkbenchViewModel
                     context,
                     moe.rukamori.archivetune.playback.ExoDownloadService::class.java,
                     request,
-                    false,
+                    true,
                 )
+                android.util.Log.d("LTDownload", "enqueued $mediaId")
                 _state.update {
                     it.copy(message = context.getString(R.string.source_workbench_download_queued, hit.track.title))
                 }

@@ -211,7 +211,7 @@ class DownloadUtil
                 DownloaderFactory { request ->
                     // `lt:` ids are custom-source tracks: the module layer cannot resolve them.
                     if (moe.rukamori.archivetune.modules.ModuleSongStore.isModuleSong(request.id)) {
-                        return@DownloaderFactory CustomSourceDownloader(request, moduleSongs, moduleStorage)
+                        return@DownloaderFactory CustomSourceDownloader(request, moduleSongs, moduleStorage, database)
                     }
                     ModuleSelectingDownloader(
                         request,

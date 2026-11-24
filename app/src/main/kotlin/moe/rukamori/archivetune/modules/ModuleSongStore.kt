@@ -101,6 +101,14 @@ class ModuleSongStore
      * without ever being stored (voice search, the browse tree, a resumed queue). Writing the row
      * from the MediaItem tag keeps those actions working for tracks the user has only played.
      */
+    /** Makes an `lt:` track visible to anything that joins `song` (downloads, history, library). */
+    suspend fun persistSong(
+        module: InstalledModule,
+        track: ModuleTrack,
+    ) {
+        database.moduleSongDao.upsert(songOf(module, track).song)
+    }
+
     suspend fun ensureRow(item: androidx.media3.common.MediaItem) {
         val id = item.mediaId
         if (!isModuleSong(id)) return
