@@ -6926,6 +6926,10 @@ class MusicService :
     ) {
         super.onMediaItemTransition(mediaItem, reason)
 
+        // Arm the watchdog here too: a custom-source item can already be buffering by the time the
+        // transition lands, and onPlaybackStateChanged would not fire again.
+        updateLtBufferWatchdog(player.playbackState)
+
         if (sleepTimer.pauseWhenSongEnd) {
             pauseFromSleepTimer()
             return

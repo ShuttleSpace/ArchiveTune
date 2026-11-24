@@ -109,7 +109,10 @@ android {
             versionName = nightlyVersionName
         }
         buildConfigField("String", "DISTRIBUTION", "\"gms\"")
-        buildConfigField("boolean", "UPDATER_AVAILABLE", "true")
+        // Fork: the updater points at rukamori/ArchiveTune, so an "update" would overwrite this
+        // build with upstream and drop the custom-source layer. Every entry point and the
+        // periodic check are already gated on this flag.
+        buildConfigField("boolean", "UPDATER_AVAILABLE", "false")
 
         val githubOwner =
             System.getenv("GITHUB_OWNER")?.trim()
@@ -147,7 +150,10 @@ android {
             dimension = "distribution"
             isDefault = true
             buildConfigField("String", "DISTRIBUTION", "\"gms\"")
-            buildConfigField("boolean", "UPDATER_AVAILABLE", "true")
+            // Fork: the updater points at rukamori/ArchiveTune, so an "update" would overwrite this
+        // build with upstream and drop the custom-source layer. Every entry point and the
+        // periodic check are already gated on this flag.
+        buildConfigField("boolean", "UPDATER_AVAILABLE", "false")
             buildConfigField("String", "DISCORD_APPLICATION_ID", "\"$discordApplicationId\"")
             buildConfigField("long", "DISCORD_APPLICATION_ID_LONG", "${discordApplicationIdLong}L")
             buildConfigField("String", "DISCORD_REDIRECT_SCHEME", "\"$discordRedirectScheme\"")
@@ -156,7 +162,10 @@ android {
         create("foss") {
             dimension = "distribution"
             buildConfigField("String", "DISTRIBUTION", "\"foss\"")
-            buildConfigField("boolean", "UPDATER_AVAILABLE", "true")
+            // Fork: the updater points at rukamori/ArchiveTune, so an "update" would overwrite this
+        // build with upstream and drop the custom-source layer. Every entry point and the
+        // periodic check are already gated on this flag.
+        buildConfigField("boolean", "UPDATER_AVAILABLE", "false")
             buildConfigField("String", "DISCORD_APPLICATION_ID", "\"$discordApplicationId\"")
             buildConfigField("long", "DISCORD_APPLICATION_ID_LONG", "${discordApplicationIdLong}L")
             buildConfigField("String", "DISCORD_REDIRECT_SCHEME", "\"$discordRedirectScheme\"")
