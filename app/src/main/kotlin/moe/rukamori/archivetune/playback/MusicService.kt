@@ -39,6 +39,7 @@ import android.net.Uri
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.util.LruCache
 import android.widget.Toast
@@ -373,6 +374,7 @@ class MusicService :
 
     /** Consecutive custom-source items skipped because they could not resolve. */
     private var ltSkipStreak = 0
+
 
     @Inject
     lateinit var moduleSongs: moe.rukamori.archivetune.modules.ModuleSongStore
@@ -7067,6 +7069,7 @@ class MusicService :
     ) {
         super.onPlaybackStateChanged(playbackState)
 
+        updateLtBufferWatchdog(playbackState)
         updateHistoryTrackingPlaybackState()
         if (playbackState == Player.STATE_ENDED || playbackState == Player.STATE_IDLE) {
             enqueueCurrentHistorySessionForFinalization()
@@ -7510,20 +7513,8 @@ class MusicService :
         super.onPlayerError(error)
         // A custom-source queue item that cannot resolve (restricted or expired track) must not
         // stop the queue with a blocking dialog: skip it and keep playing.
-        val failedId = player.currentMediaItem?.mediaId.orEmpty()
-        if (failedId.startsWith("lt:")) {
-            // seekToNextMediaItem alone does not re-prepare a player that is already in the error
-            // state, so prepare() is required or the queue stalls here.
-            if (player.hasNextMediaItem() && ltSkipStreak < 25) {
-                ltSkipStreak++
-                android.util.Log.d("LTSkip", "skipping unplayable $failedId: ${error.errorCodeName}")
-                player.seekToNextMediaItem()
-                player.prepare()
-                player.play()
-            } else {
-                android.util.Log.d("LTSkip", "stopping after $ltSkipStreak unplayable custom-source items")
-                player.pause()
-            }
+        if (player.currentMediaItem?.mediaId.orEmpty().startsWith("lt:")) {
+            skipUnplayableSourceItem(reason = error.errorCodeName)
             return
         }
         val snapshot =
@@ -7534,6 +7525,72 @@ class MusicService :
         playbackErrorRecoveryJob?.cancel()
         playbackErrorRecoveryJob = scope.launch {
             handlePlaybackError(error, snapshot)
+        }
+    }
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private var ltBufferWatchdog: Runnable? = null
+
+    /**
+     * Custom-source items are resolved lazily, so a dead endpoint shows up as endless buffering
+     * rather than an error. Watch the buffering state and treat a stall as unplayable.
+     */
+    private fun updateLtBufferWatchdog(playbackState: Int) {
+        ltBufferWatchdog?.let {
+            mainHandler.removeCallbacks(it)
+            ltBufferWatchdog = null
+        }
+        val item = player.currentMediaItem ?: return
+        if (playbackState != Player.STATE_BUFFERING || !item.mediaId.startsWith("lt:")) return
+        val watchdog = Runnable {
+            val current = player.currentMediaItem
+            if (player.playbackState == Player.STATE_BUFFERING &&
+                current != null &&
+                current.mediaId.startsWith("lt:")
+            ) {
+                skipUnplayableSourceItem(reason = "BUFFER_TIMEOUT")
+            }
+        }
+        ltBufferWatchdog = watchdog
+        mainHandler.postDelayed(watchdog, LT_BUFFER_TIMEOUT_MS)
+    }
+
+    private fun skipUnplayableSourceItem(reason: String) {
+        val failedId = player.currentMediaItem?.mediaId.orEmpty()
+        val failedTitle =
+            (player.currentMediaItem?.localConfiguration?.tag
+                as? moe.rukamori.archivetune.models.MediaMetadata)?.title.orEmpty()
+        // seekToNextMediaItem alone does not re-prepare a player that is already in the error state
+        // (or stuck buffering), so prepare() is required or the queue stalls here.
+        if (player.hasNextMediaItem() && ltSkipStreak < MAX_LT_SKIP_STREAK) {
+            ltSkipStreak++
+            android.util.Log.d("LTSkip", "skipping unplayable $failedId ($reason)")
+            // A restricted or expired custom-source track is a business answer, so say what
+            // happened instead of silently jumping to the next song.
+            notifySourceUnplayable(failedTitle)
+            player.seekToNextMediaItem()
+            player.prepare()
+            player.play()
+        } else {
+            android.util.Log.d("LTSkip", "stopping after $ltSkipStreak unplayable custom-source items")
+            notifySourceQueueStopped()
+            player.pause()
+        }
+    }
+
+    private fun notifySourceUnplayable(title: String) {
+        val message =
+            if (title.isBlank()) getString(R.string.source_play_unavailable)
+            else getString(R.string.player_source_skipped, title)
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun notifySourceQueueStopped() {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(this, R.string.player_source_queue_stopped, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -8899,6 +8956,12 @@ class MusicService :
     }
 
     companion object {
+        /** Give a lazily resolved custom-source stream this long before calling the endpoint dead. */
+        const val LT_BUFFER_TIMEOUT_MS = 20_000L
+
+        /** Stop hammering a run of dead endpoints instead of walking the whole queue. */
+        const val MAX_LT_SKIP_STREAK = 25
+
         internal fun shouldStopServiceOnTaskRemoved(
             stopMusicOnTaskClearEnabled: Boolean,
             isHostSessionActive: Boolean,

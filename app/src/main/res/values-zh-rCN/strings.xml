@@ -417,6 +417,8 @@
     <string name="skip_silence">跳过无声部分</string>
     <string name="audio_normalization">音频归一化</string>
     <string name="auto_skip_next_on_error">错误发生时自动跳到下一首歌</string>
+    <string name="player_source_skipped">《%1$s》无法播放，已跳过</string>
+    <string name="player_source_queue_stopped">连续多首无法播放，已暂停</string>
     <string name="auto_skip_next_on_error_desc">确保您的回放体验持续不断</string>
     <string name="stop_music_on_task_clear">关闭音乐，任务清除</string>
     <string name="equalizer">均衡器</string>
