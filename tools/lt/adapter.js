@@ -17,6 +17,19 @@
     return JSON.parse(raw);
   };
 
+  // Credentials the user typed into the module detail page. The host sends the
+  // module settings along with every call (`context.settings`), so remembering
+  // the last one seen is enough; a source that needs a cookie for a domain the
+  // jar has never seen gets it from getCookie() below.
+  var credential = '';
+  var rememberSettings = function (context) {
+    var settings = context && context.settings;
+    if (!settings) return;
+    var cookie = settings.cookie;
+    var value = cookie && typeof cookie === 'object' ? cookie.value : cookie;
+    if (typeof value === 'string') credential = value.trim();
+  };
+
   // Our SDK expects HostResponse fields; module-host.js returns methods.
   // Bytes -> string, one char per byte (the SDK re-decodes GBK sources itself).
   var latin1 = function (bytes) {
@@ -45,7 +58,8 @@
     },
     getCookie: function (domain) {
       var value = bridge('cookieGet', { domain: String(domain) });
-      return typeof value === 'string' && value.length > 0 ? value : null;
+      if (typeof value === 'string' && value.length > 0) return value;
+      return credential.length > 0 ? credential : null;
     },
     setCookie: function (domain, cookies) {
       bridge('cookieSet', { domain: String(domain), cookies: cookies == null ? '' : String(cookies) });
@@ -82,6 +96,7 @@
     author: manifest.author ? String(manifest.author) : '',
     description: manifest.homepage ? String(manifest.homepage) : '',
     searchTracks: async function (query, limit, context, page) {
+      rememberSettings(context);
       var pageSize = Number(limit);
       if (!isFinite(pageSize) || pageSize <= 0) pageSize = 20;
       var pageNumber = Math.round(Number(page));
@@ -99,6 +114,7 @@
       return tracks;
     },
     getTrackStreamUrl: async function (trackId, quality, context) {
+      rememberSettings(context);
       var params;
       if (quality) params = { quality: String(quality) };
       else if (context) params = { extra: context };
