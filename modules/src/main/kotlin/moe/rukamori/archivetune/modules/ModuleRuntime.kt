@@ -162,6 +162,42 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
             track.text("sourceId").ifBlank { track.text("id") }.ifBlank { trackId }, inline, value.optJSONArray("allowedDomains").strings())
     }
 
+    /**
+     * Ask a source for the lyrics of one track and return the raw LRC text.
+     *
+     * Lyrics are an optional capability: a module that does not implement
+     * `getLyric` (or has none for this track) answers null, and the caller falls
+     * back to the generic providers. The playing item's metadata is forwarded so
+     * the source can look the lyrics up by title/artist when its own platform has
+     * none.
+     */
+    suspend fun lyric(
+        id: String,
+        source: String,
+        origin: String,
+        trackId: String,
+        settings: Map<String, String>,
+        title: String,
+        artist: String,
+        album: String?,
+        durationSeconds: Int,
+    ): String? = withContext(Dispatchers.Default) {
+        val meta = JSONObject()
+            .put("title", title)
+            .put("artist", artist)
+            .put("album", album ?: JSONObject.NULL)
+            .put("durationSeconds", durationSeconds)
+            .put("context", context(settings))
+        val result = runCatching {
+            call(id, source, origin, "getLyric", JSONArray().put(trackId).put(meta))
+        }.getOrNull() ?: return@withContext null
+        when (result) {
+            is JSONObject -> result.text("content").takeIf(String::isNotBlank)
+            JSONObject.NULL -> null
+            else -> result.toString().takeIf { it.isNotBlank() && it != "null" }
+        }
+    }
+
     suspend fun authorize(id: String, source: String, origin: String): String? = withContext(Dispatchers.Default) { withTimeout(30_000) {
         lock.withLock {
             val engine = create(source, origin, id)

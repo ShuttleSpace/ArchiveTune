@@ -112,5 +112,26 @@
         sourceId: String(manifest.id),
       };
     },
+    // Lyrics for one track. The host passes title/artist/album/duration from the
+    // playing item so the source can fill the gap with a third-party provider when
+    // its own platform has no lyric.
+    getLyric: async function (trackId, meta) {
+      if (typeof source.getLyricDetail !== 'function') return null;
+      var id = String(trackId);
+      var track;
+      if (meta && meta.title) {
+        track = {
+          id: id,
+          title: String(meta.title),
+          artists: meta.artist ? [{ id: String(meta.artist), name: String(meta.artist) }] : [],
+          album: meta.album ? { id: String(meta.album), title: String(meta.album) } : undefined,
+          duration: Number(meta.durationSeconds) || 0,
+        };
+      }
+      var lyric = await source.getLyricDetail(id, track ? { track: track } : undefined);
+      if (!lyric || !lyric.content) return null;
+      if (typeof lyric.content === 'string') return { content: lyric.content, translation: lyric.translation || undefined };
+      return { content: JSON.stringify(lyric.content), translation: lyric.translation || undefined };
+    },
   };
 })();

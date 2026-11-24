@@ -126,9 +126,15 @@ fun SourceWorkbenchScreen(
         // extensions/MediaItemExt.kt:32), not media3's MediaMetadata, so the tag is
         // what actually fills its title/artist/album.
         val track = viewModel.state.value.playingTrack
+        // Canonical custom-source identity (`lt:<moduleId>:<trackId>`) even though the uri is
+        // already resolved: the lyrics provider and the play history look the track up by it,
+        // and MusicService leaves `lt:` items out of the persisted queue.
+        val mediaId = viewModel.state.value.playingModuleId?.let { moduleId ->
+            track?.let { moe.rukamori.archivetune.modules.ModuleSongStore.songId(moduleId, it.id) }
+        } ?: stream.upstreamId ?: stream.url
         val tag =
             moe.rukamori.archivetune.models.MediaMetadata(
-                id = stream.upstreamId ?: stream.url,
+                id = mediaId,
                 title = track?.title ?: viewModel.state.value.playingTitle.orEmpty(),
                 artists = track?.artists.orEmpty().map { moe.rukamori.archivetune.models.MediaMetadata.Artist(null, it) },
                 duration = track?.durationSeconds ?: 0,
@@ -138,7 +144,7 @@ fun SourceWorkbenchScreen(
         playerConnection?.playNow(
             MediaItem
                 .Builder()
-                .setMediaId(stream.upstreamId ?: stream.url)
+                .setMediaId(mediaId)
                 .setUri(stream.url)
                 .setMimeType(stream.mimeType)
                 .setMediaMetadata(

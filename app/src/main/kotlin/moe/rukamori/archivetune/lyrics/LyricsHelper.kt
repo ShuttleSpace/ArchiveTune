@@ -66,9 +66,13 @@ class LyricsHelper
     constructor(
         @ApplicationContext private val context: Context,
         private val networkConnectivity: NetworkConnectivityObserver,
+        private val moduleProvider: ModuleLyricsProvider,
     ) {
         private val baseProviders =
             listOf(
+                // First because it is the only provider that knows a custom-source
+                // track by id; it fails instantly for every other track.
+                moduleProvider,
                 BetterLyricsProvider,
                 BetterLyricsPortatoProvider,
                 YouLyPlusLyricsProvider,

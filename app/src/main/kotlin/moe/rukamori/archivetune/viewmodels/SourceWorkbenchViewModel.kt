@@ -84,6 +84,7 @@ class SourceWorkbenchViewModel
             val stream: ModuleStream? = null,
             val playingTitle: String? = null,
             val playingTrack: ModuleTrack? = null,
+            val playingModuleId: String? = null,
             val trace: List<String> = emptyList(),
             val stats: Map<String, SourceStat> = emptyMap(),
         )
@@ -339,7 +340,7 @@ class SourceWorkbenchViewModel
                             resolve()
                         }
                     val elapsed = System.currentTimeMillis() - started
-                    _state.update { it.copy(stream = stream, playingTitle = hit.track.title, playingTrack = hit.track) }
+                    _state.update { it.copy(stream = stream, playingTitle = hit.track.title, playingTrack = hit.track, playingModuleId = module.id) }
                     recordPlay(module, hit.track)
                     trace("stream ${hit.track.title} -> ${stream.mimeType} / ${elapsed}ms\n${stream.url}")
                 } catch (error: CancellationException) {
