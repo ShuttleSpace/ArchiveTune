@@ -244,7 +244,10 @@ private fun ModuleHome(model: ModuleSettingsUiModel, listState: LazyListState, o
     // growing into an endless scroll. Drag reordering only makes sense while every row is visible,
     // so it is disabled on a paged list (the accessible move actions still work).
     val paged = model.paged()
-    var page by remember(model.tab) { mutableIntStateOf(0) }
+    // Audit decision: paging restarts at page 1 whenever the list is re-filtered. Here the only
+    // filter is the tab plus the set of installed sources, so the row count is the reset key —
+    // without it, uninstalling the last row of page 3 would leave an empty page behind.
+    var page by remember(model.tab, model.rows.size) { mutableIntStateOf(0) }
     val pageCount = if (paged) (model.rows.size + MODULE_PAGE_SIZE - 1) / MODULE_PAGE_SIZE else 1
     val currentPage = page.coerceIn(0, pageCount - 1)
     val visibleRows = if (paged) model.rows.drop(currentPage * MODULE_PAGE_SIZE).take(MODULE_PAGE_SIZE) else model.rows
