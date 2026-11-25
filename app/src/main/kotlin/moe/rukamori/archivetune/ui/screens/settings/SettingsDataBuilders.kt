@@ -168,6 +168,15 @@ fun buildSettingsContent(
             accentColor = MaterialTheme.colorScheme.tertiary,
             onClick = { navController.navigate("settings/internet") },
         )
+    val downloadQueue =
+        SettingsItem(
+            key = "download_queue",
+            icon = painterResource(R.drawable.ic_download),
+            title = stringResource(R.string.download_queue_title),
+            subtitle = stringResource(R.string.download_queue_subtitle),
+            accentColor = MaterialTheme.colorScheme.tertiary,
+            onClick = { navController.navigate("auto_playlist/downloaded?tab=progress") },
+        )
     val storage =
         SettingsItem(
             key = "storage",
@@ -313,7 +322,7 @@ fun buildSettingsContent(
                 SettingsGroup(
                     key = "storage",
                     title = stringResource(R.string.storage),
-                    items = listOf(storage, backupRestore),
+                    items = listOf(downloadQueue, storage, backupRestore),
                 ),
             )
             add(

@@ -314,6 +314,8 @@
     <string name="eq_import_failed">无效配置文件数据</string>
     <string name="eq_output_gain">输出增益</string>
     <string name="eq_bass_boost">低音增强</string>
+    <string name="download_queue_title">下载队列</string>
+    <string name="download_queue_subtitle">排队中、下载中与失败的任务</string>
     <string name="storage">存储</string>
     <string name="cache">缓存</string>
     <string name="image_cache">图像缓存</string>

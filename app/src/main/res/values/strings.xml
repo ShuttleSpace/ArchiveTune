@@ -807,6 +807,8 @@
     <string name="eq_no_profiles">No saved profiles yet. Save the current sound to reuse it later.</string>
     <string name="eq_turn_on_to_adjust">Turn on sound shaping to adjust these controls</string>
     <string name="eq_reset_to_zero">Reset to 0 dB</string>
+    <string name="download_queue_title">Download queue</string>
+    <string name="download_queue_subtitle">Tasks queued, running or failed</string>
     <string name="storage">Storage</string>
     <string name="smart_trimmer">Smart Trimmer</string>
     <string name="smart_trimmer_description">Smart trimmer dynamically manages the image cache and song cache, pruning old entries to save disk space.</string>
