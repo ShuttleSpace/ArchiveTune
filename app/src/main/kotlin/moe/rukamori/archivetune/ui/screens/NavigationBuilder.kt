@@ -481,6 +481,26 @@ fun NavGraphBuilder.navigationBuilder(
             playlistId = entry.arguments?.getString("playlistId"),
         )
     }
+    composable(
+        route = "similar_tracks?mediaId={mediaId}&artist={artist}&title={title}",
+        arguments =
+            listOf(
+                navArgument("mediaId") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument("artist") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument("title") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+            ),
+    ) {
+        moe.rukamori.archivetune.ui.screens.similar.SimilarTracksScreen(navController = navController)
+    }
     composable("settings/canvas") {
         CanvasSettings(navController)
     }

@@ -585,6 +585,27 @@ fun PlayerMenu(
             )
         }
 
+        // Fork: custom-source tracks carry an `lt:<moduleId>:<trackId>` id, which is all the
+        // similar-tracks screen needs to re-search its own source by artist.
+        if (moe.rukamori.archivetune.modules.ModuleSongStore.isModuleSong(mediaMetadata.id)) {
+            MenuSection(title = stringResource(R.string.recommend_similar_title)) {
+                action(
+                    title = stringResource(R.string.player_menu_similar),
+                    icon = R.drawable.music_note,
+                    navigates = true,
+                    onClick = {
+                        onDismiss()
+                        val artist = mediaMetadata.artists.firstOrNull()?.name.orEmpty()
+                        navController.navigate(
+                            "similar_tracks?mediaId=${android.net.Uri.encode(mediaMetadata.id)}" +
+                                "&artist=${android.net.Uri.encode(artist)}" +
+                                "&title=${android.net.Uri.encode(mediaMetadata.title)}",
+                        )
+                    },
+                )
+            }
+        }
+
         if (!isLocalMedia) {
             MenuSection(title = stringResource(R.string.menu_section_offline)) {
                 downloadAction(

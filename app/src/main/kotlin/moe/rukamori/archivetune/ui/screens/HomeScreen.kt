@@ -196,28 +196,10 @@ fun HomeScreen(
                 )
             }
 
-            HomeScreenState.Empty -> {
-                HomeStatePane(
-                    iconResId = R.drawable.music_note,
-                    messageResId = null,
-                    messageOverride = stringResource(R.string.home_empty_sources_message),
-                    actionResId = R.string.retry,
-                    onAction = { viewModel.onAction(HomeAction.Refresh) },
-                    onOpenSources = { navController.navigate("settings/modules/workbench") },
-                )
-            }
-
-            is HomeScreenState.Error -> {
-                // Fork: with no YouTube account there is simply nothing to show, which the
-                // engine reports as a generic error. Say that instead of "unknown error".
-                HomeStatePane(
-                    iconResId = R.drawable.music_note,
-                    messageResId = null,
-                    messageOverride = stringResource(R.string.home_empty_sources_message),
-                    actionResId = R.string.retry,
-                    onAction = { viewModel.onAction(HomeAction.Refresh) },
-                    onOpenSources = { navController.navigate("settings/modules/workbench") },
-                )
+            // Fork: without a YouTube account there is no feed, so Home is the custom-source
+            // recommendation page instead of a dead "unknown error" pane.
+            HomeScreenState.Empty, is HomeScreenState.Error -> {
+                DailyRecommendationsSection(navController = navController)
             }
 
             is HomeScreenState.Success -> {

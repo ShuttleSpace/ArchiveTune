@@ -1464,4 +1464,13 @@
     <string name="restore_success_sources">备份已恢复 · 共 %1$d 个音源</string>
     <string name="modules_page_previous">上一页</string>
     <string name="modules_page_next">下一页</string>
+    <string name="recommend_daily_title">为你推荐</string>
+    <string name="recommend_daily_empty">先去音源工作台试听几首，这里就会出现推荐。</string>
+    <string name="recommend_open_sources">打开音源工作台</string>
+    <string name="recommend_play">播放</string>
+    <string name="recommend_loading">正在解析…</string>
+    <string name="recommend_refresh">刷新</string>
+    <string name="recommend_similar_title">相似歌曲</string>
+    <string name="recommend_similar_empty">没有找到相似歌曲</string>
+    <string name="player_menu_similar">找相似歌曲</string>
 </resources>

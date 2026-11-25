@@ -1537,4 +1537,13 @@
     <string name="restore_success_sources">Backup restored · %1$d source(s)</string>
     <string name="modules_page_previous">Previous page</string>
     <string name="modules_page_next">Next page</string>
+    <string name="recommend_daily_title">For you</string>
+    <string name="recommend_daily_empty">Preview a few tracks in the source workbench and recommendations show up here.</string>
+    <string name="recommend_open_sources">Open source workbench</string>
+    <string name="recommend_play">Play</string>
+    <string name="recommend_loading">Resolving…</string>
+    <string name="recommend_refresh">Refresh</string>
+    <string name="recommend_similar_title">Similar songs</string>
+    <string name="recommend_similar_empty">No similar tracks found</string>
+    <string name="player_menu_similar">Find similar</string>
 </resources>
