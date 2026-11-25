@@ -1484,5 +1484,10 @@
     <string name="sync_send_title">发送到设备</string>
     <string name="sync_ip_label">目标地址</string>
     <string name="sync_send_button">发送</string>
+    <string name="sync_scan">扫描设备</string>
+    <string name="sync_scanning">扫描中…</string>
+    <string name="sync_no_devices">没有发现设备。请先在另一台设备上开始接收，然后重新扫描。</string>
+    <string name="sync_advanced">高级：手动填写地址</string>
+    <string name="sync_advanced_hide">收起地址输入框</string>
     <string name="sync_sending">正在发送…</string>
 </resources>

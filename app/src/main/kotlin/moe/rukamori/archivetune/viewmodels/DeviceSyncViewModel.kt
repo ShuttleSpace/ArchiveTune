@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import moe.rukamori.archivetune.sync.DeviceSync
 import moe.rukamori.archivetune.sync.SyncClient
+import moe.rukamori.archivetune.sync.SyncDiscovery
+import moe.rukamori.archivetune.sync.SyncPeer
 import moe.rukamori.archivetune.sync.SyncServer
 import moe.rukamori.archivetune.sync.localIpv4Addresses
 import javax.inject.Inject
@@ -25,6 +27,8 @@ class DeviceSyncViewModel
             val code: String = "",
             val addresses: List<String> = localIpv4Addresses(),
             val busy: Boolean = false,
+            val peers: List<SyncPeer> = emptyList(),
+            val scanning: Boolean = false,
             val status: String? = null,
             val error: String? = null,
         )
@@ -64,6 +68,15 @@ class DeviceSyncViewModel
             server?.stop()
             server = null
             _state.update { it.copy(hosting = false) }
+        }
+
+        fun scan() {
+            if (_state.value.scanning) return
+            viewModelScope.launch {
+                _state.update { it.copy(scanning = true, error = null) }
+                val peers = runCatching { SyncDiscovery.scan() }.getOrDefault(emptyList())
+                _state.update { it.copy(scanning = false, peers = peers) }
+            }
         }
 
         fun send(

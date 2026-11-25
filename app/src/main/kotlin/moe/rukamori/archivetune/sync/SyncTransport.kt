@@ -15,7 +15,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.net.DatagramPacket
+import java.net.DatagramSocket
 import java.net.Inet4Address
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
@@ -25,6 +29,18 @@ import kotlin.random.Random
 
 /** Both ends share this port; the pairing code is the only secret. */
 const val SYNC_PORT = 8642
+
+/** UDP port a receiving device answers discovery probes on. */
+const val SYNC_DISCOVERY_PORT = 8643
+
+private const val DISCOVER_PROBE = "LISTENTWO_SYNC_DISCOVER_V1"
+
+/** A peer that answered a discovery probe. */
+data class SyncPeer(
+    val host: String,
+    val name: String,
+    val code: String,
+)
 
 object SyncJson {
     fun encode(payload: SyncPayload): String =
@@ -98,9 +114,14 @@ object SyncJson {
  * already carries OkHttp but no server-side HTTP library, and pulling one in for two routes would
  * not pay for itself.
  */
-class SyncServer(private val onPush: suspend (SyncPayload) -> String) {
+class SyncServer(
+    private val onPush: suspend (SyncPayload) -> String,
+    private val deviceName: String = android.os.Build.MODEL.orEmpty(),
+) {
     private var socket: ServerSocket? = null
     private var acceptor: Job? = null
+    private var beacon: DatagramSocket? = null
+    private var beaconJob: Job? = null
     val code: String = "%06d".format(Random.nextInt(1_000_000))
 
     val isRunning: Boolean
@@ -120,11 +141,53 @@ class SyncServer(private val onPush: suspend (SyncPayload) -> String) {
                     launch(Dispatchers.IO) { handle(client) }
                 }
             }
+        startBeacon(scope)
+    }
+
+    /** Answers discovery probes so the other device can find us without typing an address. */
+    private fun startBeacon(scope: CoroutineScope) {
+        val datagram =
+            runCatching {
+                DatagramSocket(null).apply {
+                    reuseAddress = true
+                    bind(InetSocketAddress(SYNC_DISCOVERY_PORT))
+                    broadcast = true
+                }
+            }.onFailure { android.util.Log.d("LTSync", "beacon unavailable: ${it.message}") }.getOrNull() ?: return
+        beacon = datagram
+        beaconJob =
+            scope.launch(Dispatchers.IO) {
+                val buffer = ByteArray(64)
+                while (isActive) {
+                    val packet = DatagramPacket(buffer, buffer.size)
+                    try {
+                        datagram.receive(packet)
+                    } catch (_: Exception) {
+                        break
+                    }
+                    val text = String(packet.data, 0, packet.length, Charsets.UTF_8).trim()
+                    if (text != DISCOVER_PROBE) continue
+                    // shortcut: the code travels with the heartbeat, so anyone on the LAN can push
+                    // without typing it — fine for a home network, gate it if this ever leaves home.
+                    val reply =
+                        JSONObject()
+                            .put("name", deviceName)
+                            .put("port", SYNC_PORT)
+                            .put("code", code)
+                            .toString()
+                            .toByteArray()
+                    runCatching { datagram.send(DatagramPacket(reply, reply.size, packet.address, packet.port)) }
+                }
+            }
     }
 
     fun stop() {
         acceptor?.cancel()
         acceptor = null
+        beaconJob?.cancel()
+        beaconJob = null
+        runCatching { beacon?.close() }
+        beacon = null
         runCatching { socket?.close() }
         socket = null
     }
@@ -248,6 +311,65 @@ class SyncClient
                 runCatching { JSONObject(text).optString("summary") }.getOrNull().orEmpty()
             }
         }
+}
+
+/** Broadcasts a probe and collects whoever answers within [timeoutMs]. */
+object SyncDiscovery {
+    suspend fun scan(timeoutMs: Long = 2_500): List<SyncPeer> =
+        withContext(Dispatchers.IO) {
+            val found = LinkedHashMap<String, SyncPeer>()
+            runCatching {
+                DatagramSocket().use { socket ->
+                    socket.broadcast = true
+                    val probe = DISCOVER_PROBE.toByteArray()
+                    val targets = broadcastAddresses()
+                    socket.soTimeout = 400
+                    val deadline = System.currentTimeMillis() + timeoutMs
+                    var nextProbe = 0L
+                    val buffer = ByteArray(512)
+                    while (System.currentTimeMillis() < deadline) {
+                        val now = System.currentTimeMillis()
+                        if (now >= nextProbe) {
+                            targets.forEach { target ->
+                                runCatching { socket.send(DatagramPacket(probe, probe.size, target, SYNC_DISCOVERY_PORT)) }
+                            }
+                            nextProbe = now + 600
+                        }
+                        val packet = DatagramPacket(buffer, buffer.size)
+                        try {
+                            socket.receive(packet)
+                        } catch (_: Exception) {
+                            continue
+                        }
+                        val host = packet.address?.hostAddress ?: continue
+                        val json =
+                            runCatching { JSONObject(String(packet.data, 0, packet.length, Charsets.UTF_8)) }
+                                .getOrNull() ?: continue
+                        found[host] =
+                            SyncPeer(
+                                host = host,
+                                name = json.optString("name").ifBlank { host },
+                                code = json.optString("code"),
+                            )
+                    }
+                }
+            }
+            found.values.toList()
+        }
+
+    private fun broadcastAddresses(): List<InetAddress> {
+        val all = LinkedHashSet<InetAddress>()
+        runCatching { all += InetAddress.getByName("255.255.255.255") }
+        runCatching {
+            NetworkInterface.getNetworkInterfaces().toList()
+                .filter { it.isUp && !it.isLoopback }
+                .flatMap { it.interfaceAddresses }
+                .mapNotNull { it.broadcast }
+                .filterIsInstance<Inet4Address>()
+                .forEach { all += it }
+        }
+        return all.toList()
+    }
 }
 
 /** IPv4 addresses this device answers on, for the pairing screen. */

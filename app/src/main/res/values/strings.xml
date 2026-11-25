@@ -1557,5 +1557,10 @@
     <string name="sync_send_title">Send to a device</string>
     <string name="sync_ip_label">Target address</string>
     <string name="sync_send_button">Send</string>
+    <string name="sync_scan">Scan for devices</string>
+    <string name="sync_scanning">Scanning…</string>
+    <string name="sync_no_devices">No device found. Start receiving on the other device, then scan again.</string>
+    <string name="sync_advanced">Advanced: enter an address</string>
+    <string name="sync_advanced_hide">Hide the address field</string>
     <string name="sync_sending">Sending…</string>
 </resources>

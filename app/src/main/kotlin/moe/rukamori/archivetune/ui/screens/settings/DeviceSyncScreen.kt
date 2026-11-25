@@ -12,6 +12,8 @@
 
 package moe.rukamori.archivetune.ui.screens.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,6 +22,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -31,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -58,6 +62,7 @@ fun DeviceSyncScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var host by rememberSaveable { mutableStateOf("") }
     var code by rememberSaveable { mutableStateOf("") }
+    var advanced by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -116,14 +121,41 @@ fun DeviceSyncScreen(
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SectionTitle(stringResource(R.string.sync_send_title))
-                        OutlinedTextField(
-                            value = host,
-                            onValueChange = { host = it },
-                            label = { Text(stringResource(R.string.sync_ip_label)) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                        Button(onClick = { viewModel.scan() }, enabled = !state.scanning) {
+                            Text(stringResource(if (state.scanning) R.string.sync_scanning else R.string.sync_scan))
+                        }
+                        state.peers.forEach { peer ->
+                            Text(
+                                text = "${peer.name} · ${peer.host}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            if (peer.host == host) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+                                            RoundedCornerShape(12.dp),
+                                        ).clickable {
+                                            host = peer.host
+                                            code = peer.code
+                                        }.padding(horizontal = 12.dp, vertical = 10.dp),
+                            )
+                        }
+                        if (state.peers.isEmpty() && !state.scanning) {
+                            Hint(stringResource(R.string.sync_no_devices))
+                        }
+                        TextButton(onClick = { advanced = !advanced }) {
+                            Text(stringResource(if (advanced) R.string.sync_advanced_hide else R.string.sync_advanced))
+                        }
+                        if (advanced) {
+                            OutlinedTextField(
+                                value = host,
+                                onValueChange = { host = it },
+                                label = { Text(stringResource(R.string.sync_ip_label)) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                         OutlinedTextField(
                             value = code,
                             onValueChange = { code = it },
