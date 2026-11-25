@@ -193,9 +193,13 @@ class SourceWorkbenchViewModel
                                 }
                             Triple(module, result, System.currentTimeMillis() - began)
                         }
-                    val hits = perSource.flatMap { (module, result, _) ->
-                        result.getOrNull()?.map { track -> Hit(track, module.id) }.orEmpty()
-                    }
+                    // Some sources answer the same track twice (Bilibili repeats a bvid);
+                    // the workbench list keys on "moduleId:trackId", so collapse duplicates here.
+                    val hits = perSource
+                        .flatMap { (module, result, _) ->
+                            result.getOrNull()?.map { track -> Hit(track, module.id) }.orEmpty()
+                        }
+                        .distinctBy { it.moduleId to it.track.id }
                     perSource.forEach { (module, result, time) ->
                         result
                             .onSuccess { trace("search ${module.manifest.name} \"$query\" -> ${it.size} tracks / ${time}ms") }
@@ -338,7 +342,12 @@ class SourceWorkbenchViewModel
                 result
                     .onSuccess { trace("refresh ${module.manifest.name} \"$query\" -> ${it.size} tracks / ${elapsed}ms") }
                     .onFailure { trace("refresh ${module.manifest.name} failed: ${describe(it)}") }
-                val fresh = result.getOrNull()?.map { track -> Hit(track, moduleId) }.orEmpty()
+                val fresh =
+                    result
+                        .getOrNull()
+                        ?.map { track -> Hit(track, moduleId) }
+                        .orEmpty()
+                        .distinctBy { it.track.id }
                 _state.update { state ->
                     val stats = state.stats.toMutableMap()
                     val key = module.manifest.name
