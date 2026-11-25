@@ -55,6 +55,7 @@ import moe.rukamori.archivetune.ui.screens.search.SearchScreen
 import moe.rukamori.archivetune.ui.screens.settings.AboutScreen
 import moe.rukamori.archivetune.ui.screens.settings.AccountSettings
 import moe.rukamori.archivetune.ui.screens.settings.AiIntegrationSettings
+import moe.rukamori.archivetune.ui.screens.settings.DeviceSyncScreen
 import moe.rukamori.archivetune.ui.screens.settings.AodCustomizedScreen
 import moe.rukamori.archivetune.ui.screens.settings.AndroidAutoSettings
 import moe.rukamori.archivetune.ui.screens.settings.AppUpdateRoute
@@ -500,6 +501,9 @@ fun NavGraphBuilder.navigationBuilder(
             ),
     ) {
         moe.rukamori.archivetune.ui.screens.similar.SimilarTracksScreen(navController = navController)
+    }
+    composable("settings/device_sync") {
+        DeviceSyncScreen(navController = navController)
     }
     composable("settings/canvas") {
         CanvasSettings(navController)

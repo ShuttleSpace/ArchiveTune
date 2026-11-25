@@ -3,6 +3,8 @@ plugins {
 }
 
 repositories {
+    // Fork: local prefetch mirror, so locked-down/offline builds can still resolve.
+    maven { url = uri("/Users/humphrey/.gradle/local-mirror") }
     // Fork: aliyun mirror first, upstream hosts kept as fallback (repo.maven.apache.org
     // handshakes get terminated on this network).
     maven("https://maven.aliyun.com/repository/public")

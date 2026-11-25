@@ -1546,4 +1546,16 @@
     <string name="recommend_similar_title">Similar songs</string>
     <string name="recommend_similar_empty">No similar tracks found</string>
     <string name="player_menu_similar">Find similar</string>
+    <string name="device_sync_title">Device sync</string>
+    <string name="device_sync_subtitle">Move playlists, favorites and downloads between your phone and car</string>
+    <string name="sync_receive_title">Receive on this device</string>
+    <string name="sync_receive_hint">Start receiving, then enter the address and code below on the other device on the same network.</string>
+    <string name="sync_no_network">Not connected to a network yet.</string>
+    <string name="sync_start">Start receiving</string>
+    <string name="sync_stop">Stop</string>
+    <string name="sync_code_label">Pairing code</string>
+    <string name="sync_send_title">Send to a device</string>
+    <string name="sync_ip_label">Target address</string>
+    <string name="sync_send_button">Send</string>
+    <string name="sync_sending">Sending…</string>
 </resources>

@@ -177,6 +177,15 @@ fun buildSettingsContent(
             accentColor = MaterialTheme.colorScheme.tertiary,
             onClick = { navController.navigate("auto_playlist/downloaded?tab=progress") },
         )
+    val deviceSync =
+        SettingsItem(
+            key = "device_sync",
+            icon = painterResource(R.drawable.sync),
+            title = stringResource(R.string.device_sync_title),
+            subtitle = stringResource(R.string.device_sync_subtitle),
+            accentColor = MaterialTheme.colorScheme.secondary,
+            onClick = { navController.navigate("settings/device_sync") },
+        )
     val storage =
         SettingsItem(
             key = "storage",
@@ -322,7 +331,7 @@ fun buildSettingsContent(
                 SettingsGroup(
                     key = "storage",
                     title = stringResource(R.string.storage),
-                    items = listOf(downloadQueue, storage, backupRestore),
+                    items = listOf(downloadQueue, deviceSync, storage, backupRestore),
                 ),
             )
             add(

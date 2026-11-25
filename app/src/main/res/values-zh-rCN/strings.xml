@@ -1473,4 +1473,16 @@
     <string name="recommend_similar_title">相似歌曲</string>
     <string name="recommend_similar_empty">没有找到相似歌曲</string>
     <string name="player_menu_similar">找相似歌曲</string>
+    <string name="device_sync_title">设备同步</string>
+    <string name="device_sync_subtitle">在手机与车机之间同步歌单、收藏与下载</string>
+    <string name="sync_receive_title">在本机接收</string>
+    <string name="sync_receive_hint">开始接收后，在同一网络的另一台设备上填入下面的地址与配对码。</string>
+    <string name="sync_no_network">尚未连接网络。</string>
+    <string name="sync_start">开始接收</string>
+    <string name="sync_stop">停止</string>
+    <string name="sync_code_label">配对码</string>
+    <string name="sync_send_title">发送到设备</string>
+    <string name="sync_ip_label">目标地址</string>
+    <string name="sync_send_button">发送</string>
+    <string name="sync_sending">正在发送…</string>
 </resources>
