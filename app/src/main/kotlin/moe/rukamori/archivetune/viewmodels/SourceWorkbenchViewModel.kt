@@ -174,7 +174,23 @@ class SourceWorkbenchViewModel
                     val perSource =
                         targets.map { module ->
                             val began = System.currentTimeMillis()
-                            val result = runCatching { withTimeout(25_000) { search(module, query, page = 1) } }
+                            // The runtime drops a module's engine after any failure, so a retry
+                            // rebuilds it — the same recovery the stream path already relies on.
+                            suspend fun attempt(): Result<List<ModuleTrack>> {
+                                val attempt = runCatching { withTimeout(25_000) { search(module, query, page = 1) } }
+                                // Swallowing cancellation here would fail every remaining source,
+                                // because a cancelled scope throws on each later suspension.
+                                attempt.exceptionOrNull()?.let { if (it is CancellationException) throw it }
+                                return attempt
+                            }
+                            val first = attempt()
+                            val result =
+                                if (first.isSuccess) {
+                                    first
+                                } else {
+                                    trace("retry ${module.manifest.name} \"$query\": ${describe(first.exceptionOrNull()!!)}")
+                                    attempt()
+                                }
                             Triple(module, result, System.currentTimeMillis() - began)
                         }
                     val hits = perSource.flatMap { (module, result, _) ->
@@ -317,6 +333,7 @@ class SourceWorkbenchViewModel
                 _state.update { it.copy(loadingMore = it.loadingMore + moduleId, error = null) }
                 val began = System.currentTimeMillis()
                 val result = runCatching { withTimeout(25_000) { search(module, query, page = 1) } }
+                result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
                 val elapsed = System.currentTimeMillis() - began
                 result
                     .onSuccess { trace("refresh ${module.manifest.name} \"$query\" -> ${it.size} tracks / ${elapsed}ms") }

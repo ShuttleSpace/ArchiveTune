@@ -103,6 +103,12 @@ class MediaLibrarySessionCallback
         private val moduleRepository: ModuleRepository,
     ) : MediaLibrarySession.Callback {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+        /** Last spoken search, so "重试"/"重新搜索" can rebuild the same queue. */
+        private val lastVoiceQuery = java.util.concurrent.atomic.AtomicReference("")
+        private val voiceRetryPhrases =
+            setOf("重试", "再试一次", "重新搜索", "重新搜", "刷新", "retry", "try again", "search again", "refresh")
+
         private val onlineSearchItemCache = ConcurrentHashMap<String, MediaItem>()
         private val searchResultCache = ConcurrentHashMap<String, CachedSearchResult>()
         private val spotifyTracksCache = ConcurrentHashMap<String, CachedSpotifyTracks>()
@@ -1388,7 +1394,19 @@ class MediaLibrarySessionCallback
                 val voiceQuery = firstItem.voiceSearchQuery()
                 val isVoiceSearchRequest = firstItem.requestMetadata.searchQuery != null ||
                     firstItem.requestMetadata.extras?.containsKey(MediaStore.EXTRA_MEDIA_FOCUS) == true
+                // Assistant has no "retry" media command: the phrase arrives as search text, so
+                // map it back to the last spoken query instead of searching for "重试".
+                if (isCarController && voiceQuery.trim().lowercase(java.util.Locale.ROOT) in voiceRetryPhrases) {
+                    val previous = lastVoiceQuery.get()
+                    if (previous.isNotBlank()) {
+                        val queue = resolveVoiceMediaItems(previous)
+                        if (queue.isNotEmpty()) {
+                            return@future MediaSession.MediaItemsWithStartPosition(queue, 0, startPositionMs)
+                        }
+                    }
+                }
                 if (voiceQuery.isNotBlank() || (isCarController && isVoiceSearchRequest)) {
+                    if (voiceQuery.isNotBlank()) lastVoiceQuery.set(voiceQuery)
                     val searchQueue = if (isCarController) {
                         resolveVoiceMediaItems(voiceQuery)
                     } else {
