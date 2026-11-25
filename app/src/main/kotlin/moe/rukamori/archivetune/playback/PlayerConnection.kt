@@ -252,7 +252,8 @@ class PlayerConnection(
     }
 
     /** Replace the queue with a single item and start it: the semantics of "试听". */
-    fun playNow(item: MediaItem) {
+    fun playNow(item: MediaItem, streamHeaders: Map<String, String> = emptyMap()) {
+        service.rememberStreamHeaders(item.localConfiguration?.uri?.toString().orEmpty(), streamHeaders)
         player.setMediaItem(item)
         player.prepare()
         player.play()

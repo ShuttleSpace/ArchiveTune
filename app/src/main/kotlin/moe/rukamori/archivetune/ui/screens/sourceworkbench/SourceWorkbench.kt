@@ -157,6 +157,7 @@ fun SourceWorkbenchScreen(
                 )
                 .setTag(tag)
                 .build(),
+            stream.headers,
         )
         viewModel.onStreamConsumed()
     }

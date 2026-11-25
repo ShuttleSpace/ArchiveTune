@@ -469,6 +469,15 @@ class MusicService :
     )
     private val remotePlaybackTrackingUrlCache = ConcurrentHashMap<String, String>()
     private val cacheBypassMediaIds = ConcurrentHashMap.newKeySet<String>()
+
+    /** Stream headers for custom-source URLs played without the `lt:` resolver (e.g. previews). */
+    private val moduleStreamHeaders = ConcurrentHashMap<String, Map<String, String>>()
+
+    fun rememberStreamHeaders(url: String, headers: Map<String, String>) {
+        if (url.isBlank() || headers.isEmpty()) return
+        if (moduleStreamHeaders.size > 64) moduleStreamHeaders.clear()
+        moduleStreamHeaders[url] = headers
+    }
     private val castMimeTypeCache = LruCache<String, String>(128)
     private val mediaOkHttpClient: OkHttpClient by lazy {
         OkHttpClient
@@ -7572,21 +7581,24 @@ class MusicService :
             android.util.Log.d("LTSkip", "skipping unplayable $failedId ($reason)")
             // A restricted or expired custom-source track is a business answer, so say what
             // happened instead of silently jumping to the next song.
-            notifySourceUnplayable(failedTitle)
+            notifySourceUnplayable(failedTitle, skipped = true)
             player.seekToNextMediaItem()
             player.prepare()
             player.play()
         } else {
+            // Nothing was skipped here (single-item queue or the streak already hit the cap),
+            // so "too many unplayable tracks" would be a lie for the common one-song case.
             android.util.Log.d("LTSkip", "stopping after $ltSkipStreak unplayable custom-source items")
-            notifySourceQueueStopped()
+            notifySourceUnplayable(failedTitle, skipped = false)
+            if (ltSkipStreak > 1) notifySourceQueueStopped()
             player.pause()
         }
     }
 
-    private fun notifySourceUnplayable(title: String) {
+    private fun notifySourceUnplayable(title: String, skipped: Boolean) {
         val message =
             if (title.isBlank()) getString(R.string.source_play_unavailable)
-            else getString(R.string.player_source_skipped, title)
+            else getString(if (skipped) R.string.player_source_skipped else R.string.player_source_failed, title)
         Handler(Looper.getMainLooper()).post {
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
@@ -7901,6 +7913,9 @@ class MusicService :
         if (codecs.isBlank()) mimeType.toCastMimeType() else "$mimeType; codecs=\"$codecs\"".toCastMimeType()
 
     private fun resolvePlaybackDataSpec(dataSpec: DataSpec): DataSpec {
+        moduleStreamHeaders[dataSpec.uri.toString()]?.let { headers ->
+            return dataSpec.buildUpon().setHttpRequestHeaders(dataSpec.httpRequestHeaders + headers).build()
+        }
         if (dataSpec.uri.shouldBypassYouTubeResolver()) {
             return dataSpec
         }
