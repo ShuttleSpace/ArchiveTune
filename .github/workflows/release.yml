@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          token: ${{ secrets.RELEASE_PAT }}
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           submodules: true
           fetch-depth: 0
 
