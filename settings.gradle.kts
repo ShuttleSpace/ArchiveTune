@@ -3,8 +3,11 @@
 pluginManagement {
     repositories {
         // Fork: aliyun mirrors first — repo.maven.apache.org handshakes get terminated here.
-        maven("https://maven.aliyun.com/repository/public")
-        maven("https://maven.aliyun.com/repository/google")
+        // Skipped on CI, where the mirrors are unreachable and the canonical repos work.
+        if (System.getenv("CI") == null) {
+            maven("https://maven.aliyun.com/repository/public")
+            maven("https://maven.aliyun.com/repository/google")
+        }
         google {
             content {
                 includeGroupAndSubgroups("com.android")
@@ -22,9 +25,11 @@ dependencyResolutionManagement {
 
     repositories {
         // Fork: jitpack terminates the JVM TLS handshake here; artifacts prefetched by curl.
-        maven { url = uri("/Users/humphrey/.gradle/local-mirror") }
-        maven("https://maven.aliyun.com/repository/public")
-        maven("https://maven.aliyun.com/repository/google")
+        if (System.getenv("CI") == null) {
+            maven { url = uri("/Users/humphrey/.gradle/local-mirror") }
+            maven("https://maven.aliyun.com/repository/public")
+            maven("https://maven.aliyun.com/repository/google")
+        }
         google()
         mavenCentral {
             mavenContent {
@@ -37,7 +42,13 @@ dependencyResolutionManagement {
                 // artifact is prefetched with curl into a local maven repo.
                 maven {
                     name = "JitPack"
-                    setUrl("file:///Users/humphrey/.gradle/local-mirror")
+                    setUrl(
+                        if (System.getenv("CI") == null) {
+                            "file:///Users/humphrey/.gradle/local-mirror"
+                        } else {
+                            "https://jitpack.io"
+                        },
+                    )
                 }
             }
             filter {
