@@ -261,7 +261,6 @@
     <string name="lyrics_share_style_deep_blur">Blur mendalam</string>
     <string name="lyrics_share_style_vivid_glow">Kilau cerah</string>
     <string name="lyrics_share_export_failed">Gagal membuat gambar: %1$s</string>
-    <string name="lyrics_share_export_not_supported">Berbagi gambar memerlukan Android 6.0 atau lebih baru</string>
     <string name="more_options">Opsi lainnya</string>
     <string name="remove_from_cache">Hapus dari cache</string>
     <string name="select">Pilih semua</string>
@@ -475,8 +474,6 @@
     <string name="settings_backup_restore_subtitle">Ekspor dan pulihkan data aplikasi pribadi Anda</string>
     <string name="settings_developer_options_title">Opsi Pengembang</string>
     <string name="settings_developer_options_subtitle">Fitur eksperimental dan debugging</string>
-    <string name="enable_leak_canary">Aktifkan LeakCanary</string>
-    <string name="enable_leak_canary_description">Mendeteksi kebocoran memori dan menampilkan laporan kebocoran saat aplikasi sedang berjalan.</string>
     <string name="settings_lyrics_subtitle">Penyedia lirik dan terjemahan</string>
     <string name="settings_content_subtitle">Bahasa, negara, dan rekomendasi default</string>
     <string name="settings_internet_subtitle">Proksi, DNS, dan perilaku pemutaran jaringan</string>
@@ -686,7 +683,7 @@
     <string name="canvas_spotify">Spotify</string>
     <string name="canvas_spotify_desc">Menggunakan akun Spotify yang terhubung</string>
     <string name="canvas_source_all">Semua</string>
-    <string name="canvas_source_all_desc">Coba BetterLyrics, Apple Music, TIDAL, lalu Spotify</string>
+    <string name="canvas_source_all_desc">Coba modul, BetterLyrics, Apple Music, TIDAL, lalu Spotify</string>
     <string name="canvas_wifi_only">Gunakan Wi-Fi saja</string>
     <string name="canvas_wifi_only_desc">Matikan untuk mengizinkan data seluler. Kanvas yang diunduh tetap tersedia secara offline.</string>
     <string name="canvas_provider_health">Kesehatan penyedia</string>

@@ -343,8 +343,13 @@
     <string name="lyrics_share_background_blur">背景ぼかし</string>
     <string name="lyrics_share_background_blur_value">%1$d ピクセル</string>
     <string name="lyrics_line_blur">歌詞のラインをぼかす</string>
-    <string name="lyrics_auto_hide_controls">自動非表示コントロール</string>
-    <string name="lyrics_auto_hide_controls_desc">5 秒後に再生コントロールを非表示にします。画面をタップすると、再度表示されます。</string>
+    <string name="lyrics_player_controls">再生コントロール</string>
+    <string name="lyrics_player_controls_hide">非表示</string>
+    <string name="lyrics_player_controls_auto">自動</string>
+    <string name="lyrics_player_controls_show">表示</string>
+    <string name="lyrics_player_controls_hide_desc">歌詞の表示中は再生コントロールを常に非表示にします。</string>
+    <string name="lyrics_player_controls_auto_desc">5 秒後に再生コントロールを非表示にします。画面をタップすると、再度表示されます。</string>
+    <string name="lyrics_player_controls_show_desc">歌詞の表示中は再生コントロールを常に表示します。</string>
     <string name="lyrics_searching_lyrics_providers">歌詞プロバイダーを検索中…</string>
     <string name="lyrics_source_label">Source: %1$s</string>
     <string name="lyrics_source_embedded">ファイルに埋め込まれています</string>
@@ -360,7 +365,6 @@
     <string name="lyrics_share_style_deep_blur">深いぼかし</string>
     <string name="lyrics_share_style_vivid_glow">鮮やかな輝き</string>
     <string name="lyrics_share_export_failed">イメージの作成に失敗しました: %1$s</string>
-    <string name="lyrics_share_export_not_supported">画像の共有には Android 6.0 以降が必要です</string>
     <string name="more_options">その他のオプション</string>
     <string name="remove_from_cache">キャッシュから削除</string>
     <string name="select">すべて選択</string>
@@ -632,8 +636,6 @@
     <string name="settings_backup_restore_subtitle">個人のアプリデータをエクスポートして復元する</string>
     <string name="settings_developer_options_title">開発者向けオプション</string>
     <string name="settings_developer_options_subtitle">実験的な機能とデバッグ</string>
-    <string name="enable_leak_canary">LeakCanary を有効にする</string>
-    <string name="enable_leak_canary_description">アプリの実行中にメモリ リークを検出し、リーク レポートを表示します。</string>
     <string name="settings_lyrics_subtitle">歌詞の提供者と翻訳</string>
     <string name="settings_content_subtitle">言語、国、推奨事項のデフォルト</string>
     <string name="settings_internet_subtitle">プロキシ、DNS、およびネットワーク再生動作</string>
@@ -917,7 +919,7 @@
     <string name="canvas_spotify">スポティファイ</string>
     <string name="canvas_spotify_desc">接続されている Spotify アカウントを使用します</string>
     <string name="canvas_source_all">すべて</string>
-    <string name="canvas_source_all_desc">BetterLyrics、Apple Music、TIDAL、次に Spotify を試してください</string>
+    <string name="canvas_source_all_desc">モジュール、BetterLyrics、Apple Music、TIDAL、次に Spotify を試してください</string>
     <string name="canvas_wifi_only">Wi-Fiのみを使用する</string>
     <string name="canvas_wifi_only_desc">モバイルデータを許可するにはオフにします。ダウンロードしたキャンバスはオフラインでも利用できます。</string>
     <string name="canvas_provider_health">プロバイダーの健康状態</string>

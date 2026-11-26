@@ -30,6 +30,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 
 class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
+    private companion object {
+        const val MAX_LYRICS_BYTES = 1024 * 1024
+        const val MAX_ENGINES = 4
+    }
+
     private val applicationContext = context.applicationContext
     private val lock = Mutex()
     private val engines = LinkedHashMap<String, Engine>(8, 0.75f, true)
@@ -66,17 +71,10 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
         settings: Map<String, String>,
         pageSize: Int = 10,
         page: Int = 1,
+        song: ModuleSong? = null,
     ): List<ModuleTrack> {
-        // Trailing args stay backward compatible: modules that do not know about paging
-        // simply ignore them (ArchiveTune only ever passes query+limit+context).
-        val result =
-            call(
-                id,
-                source,
-                origin,
-                "searchTracks",
-                JSONArray().put(query).put(pageSize).put(context(settings)).put(page),
-            )
+        // pageSize/page stay trailing so modules that ignore paging still work.
+        val result = call(id, source, origin, "searchTracks", JSONArray().put(query).put(pageSize).put(context(settings, song = song)).put(page))
         val tracks = when (result) {
             is JSONArray -> result
             is JSONObject -> result.optJSONArray("tracks")
@@ -100,17 +98,34 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
                 (if (track.has("durationMs")) track.optLong("durationMs").div(1000).toInt()
                     else track.optInt("duration")).takeIf { it > 0 },
                 if (track.has("explicit") && !track.isNull("explicit")) track.optBoolean("explicit") else null,
-                track.text("isrc").takeIf(String::isNotBlank),
-                track.text("thumbnail").ifBlank { track.text("thumbnailUrl") }
-                    .ifBlank { track.text("cover") }
-                    .ifBlank { track.text("artwork") }
-                    .takeIf(String::isNotBlank))
+                track.text("isrc").takeIf(String::isNotBlank))
         }
     }
 
-    suspend fun stream(id: String, source: String, origin: String, trackId: String, settings: Map<String, String>, metadata: ModuleTrack? = null): ModuleStream {
+    suspend fun playbackError(id: String, source: String, origin: String, trackId: String, failure: ModulePlaybackFailure,
+        settings: Map<String, String>, metadata: ModuleTrack? = null, song: ModuleSong? = null): ModulePlaybackDecision {
+        val value = call(id, source, origin, "onPlaybackError",
+            JSONArray().put(failure.json(trackId)).put(context(settings, metadata, song)))
+        val decision = when (value) {
+            JSONObject.NULL -> return ModulePlaybackDecision.Default
+            is String -> JSONObject().put("action", value)
+            is JSONObject -> value
+            else -> throw ModuleException(ModuleFailure.EXECUTION, stage = ModuleLoadStage.PROVIDER, diagnosticCode = "INVALID_PLAYBACK_DECISION")
+        }
+        return when (decision.optString("action").lowercase(java.util.Locale.ROOT)) {
+            "retry" -> ModulePlaybackDecision.Retry
+            "fallback" -> ModulePlaybackDecision.Fallback
+            "fail" -> ModulePlaybackDecision.Fail(decision.opt("message") as? String)
+            "", "default" -> ModulePlaybackDecision.Default
+            else -> throw ModuleException(ModuleFailure.EXECUTION, stage = ModuleLoadStage.PROVIDER, diagnosticCode = "INVALID_PLAYBACK_DECISION")
+        }
+    }
+
+    suspend fun stream(id: String, source: String, origin: String, trackId: String, settings: Map<String, String>, metadata: ModuleTrack? = null,
+        song: ModuleSong? = null, retry: ModulePlaybackFailure? = null): ModuleStream {
         val quality = settings["quality"]?.let(::parseJsonValue) ?: JSONObject.NULL
-        val value = call(id, source, origin, "getTrackStreamUrl", JSONArray().put(trackId).put(quality).put(context(settings, metadata))) as? JSONObject
+        val value = call(id, source, origin, "getTrackStreamUrl", JSONArray().put(trackId).put(quality)
+            .put(context(settings, metadata, song).apply { retry?.let { put("playbackError", it.json(trackId)) } })) as? JSONObject
             ?: throw ModuleException(ModuleFailure.EXECUTION, stage = ModuleLoadStage.PROVIDER, diagnosticCode = "INVALID_STREAM_RESULT")
         val url = ModuleHttpClient.webUrl(value.text("streamUrl").ifBlank { value.text("url") })
         val track = value.optJSONObject("track") ?: JSONObject()
@@ -163,13 +178,8 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
     }
 
     /**
-     * Ask a source for the lyrics of one track and return the raw LRC text.
-     *
-     * Lyrics are an optional capability: a module that does not implement
-     * `getLyric` (or has none for this track) answers null, and the caller falls
-     * back to the generic providers. The playing item's metadata is forwarded so
-     * the source can look the lyrics up by title/artist when its own platform has
-     * none.
+     * Fork: the older singular `getLyric` capability, still what our own sources export.
+     * Returns raw LRC text or null, and never throws so the generic providers can take over.
      */
     suspend fun lyric(
         id: String,
@@ -196,6 +206,52 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
             JSONObject.NULL -> null
             else -> result.toString().takeIf { it.isNotBlank() && it != "null" }
         }
+    }
+
+    suspend fun lyrics(id: String, source: String, origin: String, settings: Map<String, String>, song: ModuleSong): List<ModuleLyrics> {
+        val values = when (val value = call(id, source, origin, ModuleCapabilities.LYRICS, JSONArray().put(song.json()).put(context(settings, song = song)))) {
+            JSONObject.NULL -> return emptyList()
+            is JSONObject -> JSONArray().put(value)
+            is JSONArray -> value
+            else -> invalidContent("INVALID_LYRICS_RESULT")
+        }
+        if (values.length() > 8) invalidContent("INVALID_LYRICS_RESULT")
+        return (0 until values.length()).map { index ->
+            val item = values.opt(index) as? JSONObject ?: invalidContent("INVALID_LYRICS_RESULT")
+            val format = ModuleLyricsFormat.of(item.optString("format").lowercase(java.util.Locale.ROOT)) ?: invalidContent("INVALID_LYRICS_FORMAT")
+            val text = (item.opt("lyrics") ?: item.opt("text")) as? String ?: invalidContent("INVALID_LYRICS_RESULT")
+            if (text.isBlank() || text.toByteArray(Charsets.UTF_8).size > MAX_LYRICS_BYTES) invalidContent("INVALID_LYRICS_RESULT")
+            ModuleLyrics(format, text, contentText(item, "author", 256), contentUrl(item, "sourceUrl"))
+        }
+    }
+
+    suspend fun trackMetadata(id: String, source: String, origin: String, settings: Map<String, String>, song: ModuleSong): ModuleTrackDetails? {
+        val value = call(id, source, origin, ModuleCapabilities.METADATA, JSONArray().put(song.json()).put(context(settings, song = song)))
+        if (value == JSONObject.NULL) return null
+        val item = value as? JSONObject ?: invalidContent("INVALID_METADATA_RESULT")
+        val bpm = item.opt("bpm")?.takeUnless { it == JSONObject.NULL }?.let {
+            (it as? Number)?.toDouble()?.takeIf { number -> number.isFinite() && number > 0 && number < 1000 } ?: invalidContent("INVALID_METADATA_RESULT")
+        }
+        val explicit = item.opt("explicit")?.takeUnless { it == JSONObject.NULL }?.let { it as? Boolean ?: invalidContent("INVALID_METADATA_RESULT") }
+        return ModuleTrackDetails(
+            contentText(item, "title"), contentList(item, "artists"), contentText(item, "album"), contentText(item, "albumArtist"),
+            contentText(item, "releaseDate", 64), contentList(item, "genres"), contentText(item, "label"), contentText(item, "isrc", 32),
+            contentText(item, "upc", 32), contentList(item, "composers"), contentList(item, "lyricists"), contentList(item, "producers"),
+            contentText(item, "copyright"), bpm, contentText(item, "key", 32), contentText(item, "language", 64), explicit,
+            contentUrl(item, "artworkUrl", secure = true), contentUrl(item, "url"), contentText(item, "description", 8192),
+        ).takeUnless { it.isEmpty }
+    }
+
+    suspend fun canvas(id: String, source: String, origin: String, settings: Map<String, String>, song: ModuleSong): ModuleCanvas? {
+        val value = call(id, source, origin, ModuleCapabilities.CANVAS, JSONArray().put(song.json()).put(context(settings, song = song)))
+        if (value == JSONObject.NULL) return null
+        val item = value as? JSONObject ?: invalidContent("INVALID_CANVAS_RESULT")
+        val canvas = ModuleCanvas(contentText(item, "title"), contentText(item, "artist"),
+            contentUrl(item, "videoUrl", secure = true), contentUrl(item, "videoUrlVertical", secure = true),
+            contentUrl(item, "animated", secure = true), contentUrl(item, "animatedVertical", secure = true),
+            contentUrl(item, "staticImage", secure = true))
+        if (listOf(canvas.videoUrl, canvas.videoUrlVertical, canvas.animated, canvas.animatedVertical).all { it == null }) invalidContent("INVALID_CANVAS_RESULT")
+        return canvas
     }
 
     suspend fun authorize(id: String, source: String, origin: String): String? = withContext(Dispatchers.Default) { withTimeout(30_000) {
@@ -232,6 +288,7 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
     suspend fun forget(id: String) = withContext(Dispatchers.IO) {
         unload(id)
         ModuleRuntimeStorage(applicationContext, id).remove()
+        ModuleAppAttestation(applicationContext, id).remove()
     }
 
     suspend fun unload(id: String) {
@@ -245,13 +302,10 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
                 engines.remove(id)?.close()
                 engine = create(source, origin, id)
                 engines[id] = engine
-                while (engines.size > 2) engines.remove(engines.keys.first())?.close()
+                while (engines.size > MAX_ENGINES) engines.remove(engines.keys.first())?.close()
             }
             val session = checkNotNull(engine)
             val runtime = session.runtime
-            // The host keeps a per-operation deadline (15 s) that only advances on begin();
-            // without it every call on a cached engine fails with TIMEOUT once it has elapsed.
-            session.host.begin()
             session.requestProblem.set(null)
             try {
                 evaluate(runtime, session.host,
@@ -267,7 +321,7 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
                             const name = ['Error','TypeError','ReferenceError','SyntaxError','RangeError','URIError','EvalError','AbortError'].includes(error?.name) ? error.name : 'Error';
                             const frame = String(error?.stack || '').match(/module-(?:host|provider|call)\.js:\d+(?::\d+)?/);
                             const code = ['RESOLUTION_TIMEOUT','VERIFY_REQUIRED'].includes(error?.code) ? error.code : '';
-                            globalThis.__moduleResult = JSON.stringify({failed: true, name, code, frame: frame ? frame[0] : '', message: String(error?.message || '').slice(0, 300)});
+                            globalThis.__moduleResult = JSON.stringify({failed: true, name, code, frame: frame ? frame[0] : ''});
                         } finally {
                             globalThis.__moduleClearTimers();
                         }
@@ -281,9 +335,7 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
                     filename = "module-result.js",
                 )
                 if (result.isBlank() || result.length > ModuleHttpClient.MAX_BODY_BYTES) {
-                    // Name the call and the size: "INVALID_RESULT" alone tells nobody anything.
-                    val why = if (result.isBlank()) "EMPTY_RESULT" else "RESULT_TOO_LARGE (${result.length} bytes)"
-                    throw ModuleException(ModuleFailure.EXECUTION, stage = ModuleLoadStage.PROVIDER, diagnosticCode = "$function: $why")
+                    throw ModuleException(ModuleFailure.EXECUTION, stage = ModuleLoadStage.PROVIDER, diagnosticCode = "INVALID_RESULT")
                 }
                 val envelope = JSONObject(result)
                 if (envelope.optBoolean("failed")) {
@@ -295,19 +347,19 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
                         "VERIFY_REQUIRED" -> ModuleFailure.INVALID_CONFIGURATION
                         else -> if (name == "Error" || name == "AbortError") problem?.failure ?: ModuleFailure.EXECUTION else ModuleFailure.EXECUTION
                     }
-                    // Keep the JS message: without it a provider throw shows as "Error" only.
-                    val detail =
-                        listOf(name, code, envelope.optString("message").take(200), envelope.optString("frame"), problem?.code.orEmpty())
-                            .filter(String::isNotBlank)
-                            .joinToString("/")
+                    val detail = listOf(name, code, envelope.optString("frame"), problem?.code.orEmpty()).filter(String::isNotBlank).joinToString("/")
                     throw ModuleException(failure, stage = ModuleLoadStage.PROVIDER, diagnosticCode = detail)
                 }
-                if (!envelope.has("value") || envelope.isNull("value")) {
-                    // A provider that resolves null is a normal business answer (no copyright, no
-                    // stream), not a broken module — say which call returned nothing.
-                    throw ModuleException(ModuleFailure.EXECUTION, stage = ModuleLoadStage.PROVIDER, diagnosticCode = "$function: NULL_RESULT")
+                if ((!envelope.has("value") || envelope.isNull("value")) && function != ModuleCapabilities.PLAYBACK_ERROR &&
+                    function !in ModuleCapabilities.content) {
+                    throw ModuleException(ModuleFailure.EXECUTION, stage = ModuleLoadStage.PROVIDER, diagnosticCode = "INVALID_RESULT")
                 }
-                val value = envelope.get("value")
+                val value = envelope.opt("value") ?: JSONObject.NULL
+                if (function == ModuleCapabilities.CANVAS && value is JSONObject) session.host.networkPermissions?.let { permissions ->
+                    listOf("videoUrl", "videoUrlVertical", "animated", "animatedVertical", "staticImage")
+                        .mapNotNull { key -> (value.opt(key) as? String)?.takeIf(String::isNotBlank) }
+                        .forEach(permissions::requireAllowed)
+                }
                 if (function == "getTrackStreamUrl" && value is JSONObject) session.host.domains?.let { domains ->
                     session.host.networkPermissions?.requireAllowed(value.optString("streamUrl", value.optString("url")))
                     value.put("allowedDomains", JSONArray(domains))
@@ -352,14 +404,23 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
             engine.function("__moduleExtensionCall") { args -> extensionHost.invoke(args.firstOrNull()?.toString().orEmpty()) }
             engine.asyncFunction<String, String>("__moduleFetch") { json ->
                 try {
-                    http.fetch(json, origin, namespace, extensionHost.networkPermissions) { status ->
+                    http.fetch(json, origin, namespace, extensionHost.networkPermissions, extensionHost.requestSigner) { status ->
                         if (status !in 200..299) requestProblem.set(RequestProblem(ModuleFailure.NETWORK, "HTTP_$status"))
                     }
                 } catch (error: CancellationException) { throw error }
                 catch (error: Exception) {
                     val failure = (error as? ModuleException)?.failure ?: ModuleFailure.NETWORK
-                    android.util.Log.d("LTFetch", "fetch failed: ${error.javaClass.simpleName}: ${error.message}", error)
-                    requestProblem.set(RequestProblem(failure, "REQUEST_${failure.name}: ${error.javaClass.simpleName}: ${error.message.orEmpty().take(160)}"))
+                    requestProblem.set(RequestProblem(failure, (error as? ModuleException)?.diagnosticCode
+                        ?.takeIf { it.startsWith("ATTESTATION_") } ?: "REQUEST_${failure.name}"))
+                    throw error
+                }
+            }
+            engine.asyncFunction<String, String>("__moduleAttest") { nonce ->
+                try { withContext(Dispatchers.IO) { extensionHost.attest(nonce) }.toString() }
+                catch (error: CancellationException) { throw error }
+                catch (error: Exception) {
+                    val failure = (error as? ModuleException)?.failure ?: ModuleFailure.EXECUTION
+                    requestProblem.set(RequestProblem(failure, (error as? ModuleException)?.diagnosticCode ?: "ATTESTATION_${failure.name}"))
                     throw error
                 }
             }
@@ -435,9 +496,11 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
                 "displayName:p.displayName,homepage:p.homepage,repository:p.repository,license:p.license,type:p.type," +
                 "minAppVersion:p.minAppVersion,requiredRuntimeFeatures:p.requiredRuntimeFeatures,iconBase64:p.iconBase64,authentication:p.authentication," +
                 "labels:[...(Array.isArray(p.labels)?p.labels:[]),...(Array.isArray(p.tags)?p.tags:[])]," +
-                "settings:p.settings||{},capabilities:['searchTracks','getTrackStreamUrl','getAlbum','getArtist','getPlaylist'].filter(k=>typeof p[k]==='function')};})());",
+                "settings:p.settings||{},capabilities:" + JSONArray(ModuleCapabilities.known) + ".filter(k=>typeof p[k]==='function')};})());",
         )
-        return ModuleManifest.parse(JSONObject(manifest).put("authentication", host.authentication))
+        val parsed = ModuleManifest.parse(JSONObject(manifest).put("authentication", host.authentication).put("appAttestation", host.attestationDeclared))
+        host.attestedModule = if (parsed.appAttestation) parsed.id else null
+        return parsed
     }
 
     private suspend fun evaluate(runtime: QuickJs, host: ModuleExtensionHost, code: String, filename: String = "module-manifest.js"): String =
@@ -448,12 +511,44 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
         try { work.await() } catch (error: CancellationException) { host.cancel(); throw error }
     }
 
+    private fun invalidContent(code: String): Nothing =
+        throw ModuleException(ModuleFailure.EXECUTION, stage = ModuleLoadStage.PROVIDER, diagnosticCode = code)
+
+    private fun contentText(item: JSONObject, key: String, limit: Int = 2048): String? {
+        val value = item.opt(key)?.takeUnless { it == JSONObject.NULL } ?: return null
+        val text = when (value) {
+            is String -> value.trim()
+            is Number -> value.toString()
+            else -> invalidContent("INVALID_CONTENT_FIELD")
+        }
+        if (text.length > limit) invalidContent("INVALID_CONTENT_FIELD")
+        return text.takeIf(String::isNotEmpty)
+    }
+
+    private fun contentList(item: JSONObject, key: String): List<String> {
+        val value = item.opt(key)?.takeUnless { it == JSONObject.NULL } ?: return emptyList()
+        val values = when (value) {
+            is String -> listOf(value)
+            is JSONArray -> (0 until value.length()).map { value.opt(it) as? String ?: invalidContent("INVALID_CONTENT_FIELD") }
+            else -> invalidContent("INVALID_CONTENT_FIELD")
+        }.map(String::trim).filter(String::isNotEmpty).distinct()
+        if (values.size > 32 || values.any { it.length > 512 }) invalidContent("INVALID_CONTENT_FIELD")
+        return values
+    }
+
+    private fun contentUrl(item: JSONObject, key: String, secure: Boolean = false): String? {
+        val value = contentText(item, key) ?: return null
+        val url = try { ModuleHttpClient.webUrl(value) } catch (_: ModuleException) { invalidContent("INVALID_CONTENT_URL") }
+        if (secure && !url.startsWith("https://")) invalidContent("INVALID_CONTENT_URL")
+        return url
+    }
+
     private fun JSONObject.text(key: String): String = when (val value = opt(key)) {
         is String, is Number -> value.toString()
         else -> ""
     }
 
-    private fun context(settings: Map<String, String>, track: ModuleTrack? = null): JSONObject = JSONObject()
+    private fun context(settings: Map<String, String>, track: ModuleTrack? = null, song: ModuleSong? = null): JSONObject = JSONObject()
         .put("settings", JSONObject().apply {
             settings.forEach { (key, value) -> put(key, JSONObject().put("value", parseJsonValue(value))) }
         }).apply {
@@ -463,5 +558,6 @@ class ModuleRuntime(context: Context, private val http: ModuleHttpClient) {
                     .put("album", it.album).put("duration", it.durationSeconds).put("explicit", it.explicit).put("isrc", it.identifier)
                 put("track", metadata).put("metadata", metadata).put("item", metadata)
             }
+            put("song", song?.json() ?: JSONObject.NULL)
         }
 }

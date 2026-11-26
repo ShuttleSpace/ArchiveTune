@@ -8,26 +8,25 @@
 package moe.rukamori.archivetune.lyrics
 
 import android.content.Context
-import android.util.Log
-import moe.rukamori.archivetune.modules.ModuleRepository
-import moe.rukamori.archivetune.modules.ModuleSongStore
-import javax.inject.Inject
-import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
+import moe.rukamori.archivetune.modules.InstalledModule
+import moe.rukamori.archivetune.modules.ModuleContentRepository
+import moe.rukamori.archivetune.modules.ModuleException
+import moe.rukamori.archivetune.modules.ModuleFailure
+import moe.rukamori.archivetune.modules.ModuleLoadStage
+import moe.rukamori.archivetune.modules.ModuleLyrics
+import moe.rukamori.archivetune.modules.ModuleLyricsFormat
+import moe.rukamori.archivetune.modules.displayLabel
+import moe.rukamori.archivetune.modules.engineId
+import java.io.IOException
 
-/**
- * Lyrics straight from the custom source that produced the track.
- *
- * Only answers for `lt:` media ids: those are the tracks whose source knows the
- * id, and its own lyric (netease translations, kugou word-by-word) beats
- * guessing by title. Everything else fails immediately so the generic providers
- * run as if this one did not exist — matching by title/artist is what lrclib and
- * friends already do better.
- */
-@Singleton
-class ModuleLyricsProvider @Inject constructor(
-    private val repository: ModuleRepository,
+class ModuleLyricsProvider(
+    private val module: InstalledModule,
+    private val content: ModuleContentRepository,
 ) : LyricsProvider {
-    override val name: String = "Custom source"
+    override val name: String = module.displayLabel
+
+    override val identity: String = "module:${module.engineId}"
 
     override fun isEnabled(context: Context): Boolean = true
 
@@ -37,46 +36,71 @@ class ModuleLyricsProvider @Inject constructor(
         artist: String,
         album: String?,
         duration: Int,
-    ): Result<String> {
-        val parsed = ModuleSongStore.parse(id)
-        if (parsed == null) {
-            // Most tracks are not ours; log once per play so the debug log page can
-            // prove the provider was asked and had nothing to say.
-            Log.d(TAG, "skip $id (not a custom-source track)")
-            return missing("not a custom-source track")
-        }
-        val module = runCatching { repository.snapshot().modules }
-            .getOrNull()
-            ?.firstOrNull { it.id == parsed.first && it.enabled }
-            ?: run {
-                Log.d(TAG, "skip $id (source ${parsed.first} is not installed or disabled)")
-                return missing("source ${parsed.first} is not installed")
+    ): Result<String> = getAttributedLyrics(id, title, artist, album, duration).map(ProviderLyrics::lyrics)
+
+    override suspend fun getAttributedLyrics(
+        id: String,
+        title: String,
+        artist: String,
+        album: String?,
+        duration: Int,
+    ): Result<ProviderLyrics> = fetch(id, title, artist, album, duration).mapCatching { values ->
+        values.firstOrNull() ?: throw ModuleLyricsNotFoundException()
+    }
+
+    override suspend fun getAllAttributedLyrics(
+        id: String,
+        title: String,
+        artist: String,
+        album: String?,
+        duration: Int,
+        callback: (ProviderLyrics) -> Unit,
+    ) {
+        fetch(id, title, artist, album, duration)
+            .onSuccess { values -> values.forEach(callback) }
+            .onFailure { if (it is IOException) throw it }
+    }
+
+    private suspend fun fetch(
+        id: String,
+        title: String,
+        artist: String,
+        album: String?,
+        duration: Int,
+    ): Result<List<ProviderLyrics>> =
+        try {
+            val song = content.song(id, title, listOf(artist), album, duration)
+            if (song == null) {
+                Result.success(emptyList())
+            } else {
+                Result.success(content.lyrics(module, song).map { it.toProviderLyrics() })
             }
-        val lyrics = runCatching {
-            repository.runtime.lyric(
-                id = "${module.id}:${module.revision}",
-                source = module.source,
-                origin = module.origin,
-                trackId = parsed.second,
-                settings = module.configuration,
-                title = title,
-                artist = artist,
-                album = album,
-                durationSeconds = duration,
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: ModuleException) {
+            Result.failure(
+                if (error.failure == ModuleFailure.NETWORK || error.failure == ModuleFailure.TIMEOUT) {
+                    IOException("Module lyrics are temporarily unavailable", error)
+                } else {
+                    error
+                },
             )
-        }.onFailure { Log.d(TAG, "fail $id: ${it.javaClass.simpleName}: ${it.message}") }.getOrNull()
-        return if (lyrics.isNullOrBlank()) {
-            Log.d(TAG, "miss $id (${module.manifest.name} returned no lyric for ${parsed.second})")
-            missing("source returned no lyric")
-        } else {
-            Log.d(TAG, "hit $id via ${module.manifest.name}: ${lyrics.length} chars")
-            Result.success(lyrics)
         }
-    }
 
-    private companion object {
-        const val TAG = "LTLyric"
+    private fun ModuleLyrics.toProviderLyrics(): ProviderLyrics {
+        val normalized = LyricsUtils.normalizeLyricsText(text)
+        val ttml = LyricsUtils.isTtml(normalized)
+        val valid = when (format) {
+            ModuleLyricsFormat.TTML -> ttml
+            ModuleLyricsFormat.LRC -> !ttml && LyricsUtils.isLineSyncedLrc(normalized)
+            ModuleLyricsFormat.SYLLABLE -> !ttml && LyricsUtils.isLineSyncedLrc(normalized) && LyricsUtils.hasWordSyncedLyrics(normalized)
+            ModuleLyricsFormat.PLAIN -> !normalized.startsWith("<") && !LyricsUtils.isLineSyncedLrc(normalized)
+        }
+        if (!valid) {
+            throw ModuleException(ModuleFailure.EXECUTION, stage = ModuleLoadStage.PROVIDER, diagnosticCode = "LYRICS_FORMAT_MISMATCH")
+        }
+        return ProviderLyrics(lyrics = normalized, author = author, sourceUrl = sourceUrl)
     }
-
-    private fun missing(reason: String): Result<String> = Result.failure(NoSuchElementException(reason))
 }
+
+private class ModuleLyricsNotFoundException : IllegalStateException("The module returned no lyrics")

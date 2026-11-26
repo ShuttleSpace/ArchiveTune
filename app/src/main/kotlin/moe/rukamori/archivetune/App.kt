@@ -13,7 +13,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -29,6 +28,7 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -42,6 +42,7 @@ import moe.rukamori.archivetune.downloads.DownloadedArtworkRepository
 import moe.rukamori.archivetune.extensions.*
 import moe.rukamori.archivetune.gatekeeper.GatekeeperResult
 import moe.rukamori.archivetune.gatekeeper.RunGatekeeperCheckUseCase
+import moe.rukamori.archivetune.innertube.PlaybackAuthState
 import moe.rukamori.archivetune.innertube.YouTube
 import moe.rukamori.archivetune.innertube.models.YouTubeLocale
 import moe.rukamori.archivetune.kugou.KuGou
@@ -65,6 +66,7 @@ import moe.rukamori.archivetune.utils.clearPlaybackWebAuthSession
 import moe.rukamori.archivetune.utils.dataStore
 import moe.rukamori.archivetune.utils.get
 import moe.rukamori.archivetune.utils.potoken.BotGuardTokenGenerator
+import moe.rukamori.archivetune.utils.putAccountSessionIndex
 import moe.rukamori.archivetune.utils.reportException
 import moe.rukamori.archivetune.utils.toPlaybackAuthState
 import okhttp3.Dns
@@ -136,7 +138,6 @@ class App :
         }
         BotGuardTokenGenerator.initialize(this)
         PreferenceStore.start(this)
-        LeakCanaryController.initialize(this)
         Timber.plant(Timber.DebugTree())
         try {
             Timber.plant(
@@ -277,7 +278,7 @@ class App :
                     Triple(
                         it[EnableDnsOverHttpsKey] ?: false,
                         it[DnsOverHttpsProviderKey] ?: "Cloudflare",
-                        it[stringPreferencesKey("customDnsUrl")] ?: "https://",
+                        it[CustomDnsUrlKey] ?: "https://",
                     )
                 }.distinctUntilChanged()
                 .collect { (enabled, provider, customUrl) ->
@@ -333,6 +334,33 @@ class App :
                                 settings[VisitorDataKey] = newVisitorData
                             }
                         }
+                }
+        }
+
+        applicationScope.launch(Dispatchers.IO) {
+            dataStore.data
+                .map { preferences ->
+                    preferences
+                        .toPlaybackAuthState()
+                        .takeIf { it.hasLoginCookie && it.accountIndex == null }
+                        ?.cookie
+                }.distinctUntilChanged()
+                .collectLatest { cookie ->
+                    if (cookie == null) return@collectLatest
+                    val accountIndex =
+                        YouTube
+                            .accountSessionIndex(PlaybackAuthState(cookie = cookie))
+                            .onFailure { failure ->
+                                if (failure is CancellationException) throw failure
+                                reportException(failure)
+                            }.getOrNull()
+                            ?: return@collectLatest
+                    dataStore.edit { settings ->
+                        val persisted = settings.toPlaybackAuthState()
+                        if (persisted.cookie == cookie && persisted.accountIndex == null) {
+                            settings.putAccountSessionIndex(accountIndex)
+                        }
+                    }
                 }
         }
 

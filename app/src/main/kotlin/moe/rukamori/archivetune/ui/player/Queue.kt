@@ -43,11 +43,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import moe.rukamori.archivetune.ui.component.BackAwareModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -61,6 +61,7 @@ import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.PlayerDesignStyle
 import moe.rukamori.archivetune.constants.PlayerDesignStyleKey
 import moe.rukamori.archivetune.constants.EnableHapticFeedbackKey
+import moe.rukamori.archivetune.constants.ShowCodecOnPlayerKey
 import moe.rukamori.archivetune.ui.component.BottomSheetState
 import moe.rukamori.archivetune.ui.component.LocalBottomSheetPageState
 import moe.rukamori.archivetune.ui.component.LocalMenuState
@@ -128,7 +129,11 @@ fun Queue(
                             if (latestQueueVisible) {
                                 val message = if (event.count == 1) context.getString(R.string.removed_song_from_queue, event.title.orEmpty())
                                     else context.getString(R.string.removed_n_songs_from_queue, event.count)
-                                undo = snackbar.showSnackbar(message, actionLabel = context.getString(R.string.undo)) == SnackbarResult.ActionPerformed
+                                undo = snackbar.showSnackbar(
+                                    message = message,
+                                    actionLabel = context.getString(R.string.undo),
+                                    duration = SnackbarDuration.Long,
+                                ) == SnackbarResult.ActionPerformed
                             }
                         } finally { viewModel.finishRemoval(event.token, undo) }
                     }
@@ -237,7 +242,7 @@ internal fun QueueFooter(
     val sleepTimerEnabled = chrome.sleepTimerEnabled
     val sleepTimerTimeLeft = chrome.sleepTimerTimeLeft
     val playerDesignStyle by rememberEnumPreference(key = PlayerDesignStyleKey, defaultValue = PlayerDesignStyle.V4)
-    val (showCodecOnPlayer) = rememberPreference(booleanPreferencesKey("show_codec_on_player"), false)
+    val (showCodecOnPlayer) = rememberPreference(ShowCodecOnPlayerKey, false)
 
     Box(
         modifier = modifier

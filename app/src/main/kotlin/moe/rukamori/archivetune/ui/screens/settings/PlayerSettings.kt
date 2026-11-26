@@ -59,6 +59,7 @@ import moe.rukamori.archivetune.constants.HISTORY_DURATION_DEFAULT
 import moe.rukamori.archivetune.constants.HistoryDuration
 import moe.rukamori.archivetune.constants.PauseOnDeviceMuteKey
 import moe.rukamori.archivetune.constants.PermanentShuffleKey
+import moe.rukamori.archivetune.constants.PlayVideoAsOfficialAudioKey
 import moe.rukamori.archivetune.constants.PersistentQueueKey
 import moe.rukamori.archivetune.constants.SeekExtraSeconds
 import moe.rukamori.archivetune.constants.SkipSilenceKey
@@ -161,6 +162,11 @@ fun PlayerSettings(navController: NavController) {
         rememberEnumPreference(
             AudioQualityKey,
             defaultValue = AudioQuality.AUTO,
+        )
+    val (playVideoAsOfficialAudio, onPlayVideoAsOfficialAudioChange) =
+        rememberPreference(
+            PlayVideoAsOfficialAudioKey,
+            defaultValue = false,
         )
     val (persistentQueue, onPersistentQueueChange) =
         rememberPreference(
@@ -374,6 +380,16 @@ fun PlayerSettings(navController: NavController) {
                     )
                 }
 
+                item {
+                    SwitchPreference(
+                        title = { Text(stringResource(R.string.play_video_as_official_audio)) },
+                        description = stringResource(R.string.play_video_as_official_audio_desc),
+                        icon = { Icon(painterResource(R.drawable.music_note), null) },
+                        checked = playVideoAsOfficialAudio,
+                        onCheckedChange = onPlayVideoAsOfficialAudioChange,
+                    )
+                }
+
                 playbackPerformancePreferences(
                     state = playbackPerformanceSettingsState,
                     onLowDataModeChange = onLowDataModeChange,
@@ -397,10 +413,7 @@ fun PlayerSettings(navController: NavController) {
                         icon = { Icon(painterResource(R.drawable.animation), null) },
                         checked = crossfadeEnabled,
                         onCheckedChange = { enabled ->
-                            if (enabled) {
-                                onAudioOffloadChange(false)
-                                onUsbBitPerfectChange(false)
-                            }
+                            if (enabled) onAudioOffloadChange(false)
                             onCrossfadeEnabledChange(enabled)
                         },
                     )
@@ -431,7 +444,7 @@ fun PlayerSettings(navController: NavController) {
                         icon = { Icon(painterResource(R.drawable.fast_forward), null) },
                         checked = skipSilence,
                         onCheckedChange = onSkipSilenceChange,
-                        isEnabled = !audioOffload && !usbBitPerfect,
+                        isEnabled = !audioOffload,
                     )
                 }
 
@@ -455,7 +468,6 @@ fun PlayerSettings(navController: NavController) {
                             if (enabled) {
                                 onSkipSilenceChange(false)
                                 onCrossfadeEnabledChange(false)
-                                onUsbBitPerfectChange(false)
                             }
                         },
                     )
@@ -467,14 +479,7 @@ fun PlayerSettings(navController: NavController) {
                         description = stringResource(R.string.usb_bit_perfect_desc),
                         icon = { Icon(Icons.Rounded.Usb, null) },
                         checked = usbBitPerfect,
-                        onCheckedChange = { enabled ->
-                            onUsbBitPerfectChange(enabled)
-                            if (enabled) {
-                                onAudioOffloadChange(false)
-                                onSkipSilenceChange(false)
-                                onCrossfadeEnabledChange(false)
-                            }
-                        },
+                        onCheckedChange = onUsbBitPerfectChange,
                     )
                 }
 

@@ -125,7 +125,6 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.C
 import androidx.media3.common.Player.STATE_BUFFERING
@@ -182,6 +181,7 @@ import moe.rukamori.archivetune.constants.PlayerCustomImageUriKey
 import moe.rukamori.archivetune.constants.PlayerDesignStyle
 import moe.rukamori.archivetune.constants.PlayerDesignStyleKey
 import moe.rukamori.archivetune.constants.QueuePeekHeight
+import moe.rukamori.archivetune.constants.ShowCodecOnPlayerKey
 import moe.rukamori.archivetune.constants.ShowPlayerVolumeBarKey
 import moe.rukamori.archivetune.constants.SliderStyle
 import moe.rukamori.archivetune.constants.SliderStyleKey
@@ -331,7 +331,7 @@ fun BottomSheetPlayer(
         immersivePlayerViewModel.bind(playerConnection)
         onDispose { immersivePlayerViewModel.unbind(playerConnection) }
     }
-    val playbackError by playerConnection.error.collectAsStateWithLifecycle()
+    val playbackFailure by playerConnection.failure.collectAsStateWithLifecycle()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val retryPlayback =
@@ -384,7 +384,7 @@ fun BottomSheetPlayer(
     val (blurRadius) = rememberPreference(BlurRadiusKey, 48f)
     val (backdropEnabled) = rememberPreference(BackdropEnabledKey, defaultValue = true)
     val (backdropBlurAmount) = rememberPreference(BackdropBlurAmountKey, defaultValue = 60)
-    val (showCodecOnPlayer) = rememberPreference(booleanPreferencesKey("show_codec_on_player"), false)
+    val (showCodecOnPlayer) = rememberPreference(ShowCodecOnPlayerKey, false)
     val (incrementalSeekSkipEnabled) = rememberPreference(moe.rukamori.archivetune.constants.SeekExtraSeconds, defaultValue = false)
     var keyboardSkipMultiplier by remember { mutableStateOf(1) }
     var lastKeyboardTapTime by remember { mutableLongStateOf(0L) }
@@ -2072,18 +2072,18 @@ fun BottomSheetPlayer(
         pureBlack = useBlackBackground,
     )
 
-    val activePlaybackError = playbackError
+    val activePlaybackFailure = playbackFailure
     val isRecoveryDestination =
         currentRoute?.startsWith(LOGIN_ROUTE) == true || currentRoute == "settings/account"
-    if (activePlaybackError != null && !isRecoveryDestination) {
-        val errorInfo = remember(activePlaybackError) { activePlaybackError.toPlaybackErrorInfo() }
+    if (activePlaybackFailure != null && !isRecoveryDestination) {
+        val errorInfo = remember(activePlaybackFailure.error) { activePlaybackFailure.error.toPlaybackErrorInfo() }
         val loginClick =
             remember(errorInfo.loginRecoveryUrl, navigateToLogin) {
                 { navigateToLogin(errorInfo.loginRecoveryUrl) }
             }
 
         PlaybackErrorDialog(
-            error = activePlaybackError,
+            failure = activePlaybackFailure,
             showLoginAction = errorInfo.loginRecoveryUrl != null,
             onRetry = retryPlayback,
             onClose = dismissPlaybackError,

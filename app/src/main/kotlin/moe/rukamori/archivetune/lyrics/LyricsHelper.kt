@@ -35,7 +35,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import moe.rukamori.archivetune.constants.EnableBetterLyricsKey
 import moe.rukamori.archivetune.constants.EnableBetterLyricsPortatoKey
 import moe.rukamori.archivetune.constants.EnableBinimumLyricsKey
-import moe.rukamori.archivetune.constants.EnableMusixmatchLyricsKey
 import moe.rukamori.archivetune.constants.EnableKugouKey
 import moe.rukamori.archivetune.constants.EnableLrcLibKey
 import moe.rukamori.archivetune.constants.EnableLrcRedLyricsKey
@@ -53,6 +52,8 @@ import moe.rukamori.archivetune.constants.PreferredLyricsProvider
 import moe.rukamori.archivetune.constants.deserializeLyricsProviderOrder
 import moe.rukamori.archivetune.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
 import moe.rukamori.archivetune.models.MediaMetadata
+import moe.rukamori.archivetune.modules.ModuleCapabilities
+import moe.rukamori.archivetune.modules.ModuleContentRepository
 import moe.rukamori.archivetune.utils.GlobalLog
 import moe.rukamori.archivetune.utils.NetworkConnectivityObserver
 import moe.rukamori.archivetune.utils.dataStore
@@ -66,13 +67,14 @@ class LyricsHelper
     constructor(
         @ApplicationContext private val context: Context,
         private val networkConnectivity: NetworkConnectivityObserver,
-        private val moduleProvider: ModuleLyricsProvider,
+        private val moduleContent: ModuleContentRepository,
+        private val ltModuleProvider: LtModuleLyricsProvider,
     ) {
         private val baseProviders =
             listOf(
                 // First because it is the only provider that knows a custom-source
                 // track by id; it fails instantly for every other track.
-                moduleProvider,
+                ltModuleProvider,
                 BetterLyricsProvider,
                 BetterLyricsPortatoProvider,
                 YouLyPlusLyricsProvider,
@@ -86,7 +88,6 @@ class LyricsHelper
                 PaxsenixAppleMusicLyricsProvider,
                 PaxsenixSpotifyLyricsProvider,
                 PaxsenixMusixmatchLyricsProvider,
-                MusixmatchLyricsProvider,
                 YouTubeSubtitleLyricsProvider,
                 YouTubeLyricsProvider,
             )
@@ -106,7 +107,6 @@ class LyricsHelper
                 PaxsenixAppleMusicLyricsProvider to EnablePaxsenixAppleMusicLyricsKey,
                 PaxsenixSpotifyLyricsProvider to EnablePaxsenixSpotifyLyricsKey,
                 PaxsenixMusixmatchLyricsProvider to EnablePaxsenixMusixmatchLyricsKey,
-                MusixmatchLyricsProvider to EnableMusixmatchLyricsKey,
             )
 
         private val paxsenixProviders =
@@ -143,7 +143,7 @@ class LyricsHelper
                 mediaMetadata.artists.joinToString { it.name },
                 mediaMetadata.album?.title,
                 mediaMetadata.duration,
-                providers.map { it.name },
+                providers.map { it.identity },
             )
             if (forceRefresh) invalidateCache(request)
             getOrFetchLyrics(request, providers)
@@ -206,7 +206,7 @@ class LyricsHelper
         ): Unit = withContext(Dispatchers.IO) {
             val providers = orderedProviders()
             val request = RequestKey(
-                mediaId, songTitle, songArtists, songAlbum, duration, providers.map { it.name },
+                mediaId, songTitle, songArtists, songAlbum, duration, providers.map { it.identity },
             )
             if (forceRefresh) invalidateCache(request)
             val generation: Long
@@ -455,20 +455,30 @@ class LyricsHelper
                     PreferredLyricsProvider.PAXSENIX_APPLE_MUSIC to PaxsenixAppleMusicLyricsProvider,
                     PreferredLyricsProvider.PAXSENIX_SPOTIFY to PaxsenixSpotifyLyricsProvider,
                     PreferredLyricsProvider.PAXSENIX_MUSIXMATCH to PaxsenixMusixmatchLyricsProvider,
-                    PreferredLyricsProvider.MUSIXMATCH to MusixmatchLyricsProvider,
                     PreferredLyricsProvider.UNISON to UnisonLyricsProvider,
                 )
             val userOrdered = orderedEnums.mapNotNull { providerMap[it] }
             val rest = baseProviders.filterNot { it in userOrdered }
             val paxsenixEnabled = preferences[EnablePaxsenixLyricsKey] ?: true
             val paxsenixApiKeyConfigured = !preferences[PaxsenixApiKeyKey].isNullOrBlank()
-            return (userOrdered + rest).distinct().filter { provider ->
+            val moduleProviders = moduleProviders()
+            return moduleProviders + (userOrdered + rest).distinct().filter { provider ->
                 val providerEnabled = providerPreferenceKeys[provider]?.let { preferences[it] } ?: true
                 val paxsenixProviderEnabled =
                     provider !in paxsenixProviders || (paxsenixEnabled && paxsenixApiKeyConfigured)
                 providerEnabled && paxsenixProviderEnabled
             }
         }
+
+        private suspend fun moduleProviders(): List<LyricsProvider> =
+            try {
+                moduleContent.providers(ModuleCapabilities.LYRICS).map { ModuleLyricsProvider(it, moduleContent) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                reportException(e)
+                emptyList()
+            }
 
         fun clearCache() {
             synchronized(cacheLock) {
